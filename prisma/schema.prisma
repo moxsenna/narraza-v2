@@ -1,0 +1,131 @@
+// GenerationJob* tables land in M3.0
+// M0: identity, session, challenge, project shell only
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  active
+  suspended
+  deleted
+}
+
+enum FoundationStatus {
+  none
+  draft
+  locked
+}
+
+enum ProjectStartMode {
+  guided
+  advanced
+}
+
+model User {
+  id            String     @id @default(cuid())
+  email         String     @unique
+  emailNormalized String   @map("email_normalized")
+  name          String?
+  status        UserStatus @default(active)
+  createdAt     DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt     DateTime?  @map("deleted_at") @db.Timestamptz(3)
+
+  accounts   Account[]
+  sessions   Session[]
+  projects   Project[]
+  challenges EmailLoginChallenge[]
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String  @map("user_id")
+  type              String
+  provider          String
+  providerAccountId String  @map("provider_account_id")
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String    @id @default(cuid())
+  sessionToken String    @unique @map("session_token")
+  userId       String    @map("user_id")
+  expiresAt    DateTime  @map("expires_at") @db.Timestamptz(3)
+  lastActiveAt DateTime  @default(now()) @map("last_active_at") @db.Timestamptz(3)
+  revokedAt    DateTime? @map("revoked_at") @db.Timestamptz(3)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model EmailLoginChallenge {
+  id                   String    @id @default(cuid())
+  userId               String?   @map("user_id")
+  identifierNormalized String    @map("identifier_normalized")
+  tokenHash            String    @map("token_hash")
+  nonce                String
+  expiresAt            DateTime  @map("expires_at") @db.Timestamptz(3)
+  consumedAt           DateTime? @map("consumed_at") @db.Timestamptz(3)
+  revokedAt            DateTime? @map("revoked_at") @db.Timestamptz(3)
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([identifierNormalized, createdAt])
+  @@index([tokenHash])
+  @@map("email_login_challenges")
+}
+
+model Project {
+  id                      String           @id @default(cuid())
+  ownerUserId             String           @map("owner_user_id")
+  title                   String
+  startMode               ProjectStartMode @default(guided) @map("start_mode")
+  foundationStatus        FoundationStatus @default(none) @map("foundation_status")
+  currentCanonicalVersion Int              @default(0) @map("current_canonical_version")
+  createRequestId         String?          @map("create_request_id")
+  createdAt               DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt               DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt               DateTime?        @map("deleted_at") @db.Timestamptz(3)
+
+  owner User @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+
+  @@unique([ownerUserId, createRequestId])
+  @@index([ownerUserId])
+  @@map("projects")
+}
+
+/// Minimal ledger for signup grant in M0; full credit model expands in M3.0
+model CreditLedger {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  entryType   String   @map("entry_type")
+  amountMicro BigInt   @map("amount_micro")
+  dedupeKey   String   @unique @map("dedupe_key")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([userId])
+  @@map("credit_ledger")
+}

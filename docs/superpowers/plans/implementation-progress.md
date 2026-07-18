@@ -4,13 +4,14 @@
 M0 — Scaffold, env, auth, project shell
 
 ## Last completed task
-PHASE A — Implementation plan made executable (self-review passed)
+M0.2 — packages/shared env pick parsers + public errors (5/5 tests green)
 
 ## Current task
-M0.1 — Git + root workspace
+M0.3 — Prisma identity baseline
 
 ## Tests currently green
-- (none yet — monorepo scaffold next)
+- `@narraza/shared` env parsers (5): env-boundary partial
+- typecheck `@narraza/shared` green
 
 ## Known failures
 - none
@@ -26,17 +27,18 @@ M0.1 — Git + root workspace
 - Mock AI uses full production pipeline
 - Autonomous goal: no wait for plan re-approval; start M0 after plan commit
 - Execution: subagent-driven-development preferred
+- Node engines: `>=22` (host currently Node 24)
 
 ## Next exact command
 ```bash
 cd "D:/Coding/Narraza Fix/narraza v2"
-# after plan commit: implement M0.1 root workspace files
+docker compose up -d
+# then M0.3 prisma schema + migrate
 ```
 
 ## Git status
-- git init done on master
-- plan rewrite pending commit
-- no application code yet
+- Commits: plan, specs, M0.1 chore workspace, M0.2 shared
+- Working tree should be clean after progress journal update
 
 ## Milestone notes
 ### PHASE A

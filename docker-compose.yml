@@ -6,7 +6,7 @@ services:
       POSTGRES_PASSWORD: narraza
       POSTGRES_DB: narraza
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - narraza_pg:/var/lib/postgresql/data
     healthcheck:
