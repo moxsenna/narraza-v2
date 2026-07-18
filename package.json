@@ -1,0 +1,29 @@
+{
+  "name": "narraza",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22 <23"
+  },
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "dev": "npm run dev -w @narraza/web",
+    "db:migrate": "prisma migrate dev --schema prisma/schema.prisma",
+    "db:generate": "prisma generate --schema prisma/schema.prisma",
+    "architecture": "depcruise --config dependency-cruiser.config.cjs apps packages"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5",
+    "eslint": "^9.19.0",
+    "prisma": "^5.22.0",
+    "dependency-cruiser": "^16.9.0"
+  }
+}

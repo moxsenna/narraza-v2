@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: narraza
+      POSTGRES_PASSWORD: narraza
+      POSTGRES_DB: narraza
+    ports:
+      - "5432:5432"
+    volumes:
+      - narraza_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U narraza -d narraza"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  narraza_pg:
