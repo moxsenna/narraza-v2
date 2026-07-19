@@ -62,7 +62,8 @@ jobs:
       - run: npm run typecheck
 
   # ─────────────────────────────────────────────────────────────
-  # Unit tests (shared, core, ai, application, db — no DB required subset)
+  # Unit tests (pure packages — no Postgres)
+  # DB-backed application/db suites run in Integration Tests.
   # ─────────────────────────────────────────────────────────────
   unit:
     name: Unit Tests
@@ -82,8 +83,8 @@ jobs:
           npx tsc -p packages/ai/tsconfig.json
           npx tsc -p packages/application/tsconfig.json
           npx tsc -p packages/db/tsconfig.json
-      # Project names match package.json "name" fields
-      - run: npx vitest run --project @narraza/core --project @narraza/shared --project @narraza/ai --project @narraza/application --project @narraza/db
+      # Pure unit only — no DATABASE_URL required
+      - run: npx vitest run --project @narraza/core --project @narraza/shared --project @narraza/ai
 
   # ─────────────────────────────────────────────────────────────
   # Integration tests (application + db with Postgres)
@@ -220,10 +221,17 @@ jobs:
         run: |
           set -euo pipefail
           export AI_ENABLE_MOCK=true
-          export NODE_ENV=production
-          # next build needs mock allowed only outside production NODE_ENV for AI factory;
-          # security smoke uses mock AI for build-time page data collection.
-          export NODE_ENV=development
+          # Avoid production NODE_ENV so mock AI factory remains valid during build.
+          unset NODE_ENV || true
+          export AUTH_SECRET="${AUTH_SECRET:-ci-test-auth-secret-not-for-production}"
+          export AUTH_URL="${AUTH_URL:-http://localhost:3000}"
+          export DATABASE_URL_WEB="${DATABASE_URL_WEB:-$DATABASE_URL}"
+          export EMAIL_FROM="${EMAIL_FROM:-CI <noreply@ci.local>}"
+          export EMAIL_CHALLENGE_PEPPER="${EMAIL_CHALLENGE_PEPPER:-ci-pepper}"
+          export RATE_LIMIT_PEPPER="${RATE_LIMIT_PEPPER:-ci-rate}"
+          export SIGNUP_GRANT_MICRO_IDR="${SIGNUP_GRANT_MICRO_IDR:-5000000000}"
+          export MAIL_TRANSPORT=file
+          export MAIL_FILE_DIR=.data/mail
           npm run build -w @narraza/web
           # Scan built JS for API key patterns — must not find any
           if find apps/web/.next -name '*.js' -print -quit 2>/dev/null | grep -q .; then
@@ -295,3 +303,13 @@ jobs:
           CI: 'true'
           AI_ENABLE_MOCK: 'true'
           NODE_ENV: development
+          MAIL_TRANSPORT: file
+          MAIL_FILE_DIR: ${{ github.workspace }}/.data/mail
+          DATABASE_URL: postgresql://narraza:narraza@localhost:5432/narraza
+          DATABASE_URL_WEB: postgresql://narraza:narraza@localhost:5432/narraza
+          AUTH_SECRET: ci-test-auth-secret-not-for-production
+          AUTH_URL: http://localhost:3000
+          EMAIL_FROM: 'CI <noreply@ci.local>'
+          EMAIL_CHALLENGE_PEPPER: ci-pepper
+          RATE_LIMIT_PEPPER: ci-rate
+          SIGNUP_GRANT_MICRO_IDR: '5000000000'
