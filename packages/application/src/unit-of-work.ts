@@ -2,6 +2,7 @@ import type { ProjectRepo } from './ports/project-ports.js';
 import type { FoundationRepo } from './ports/foundation-ports.js';
 import type { CharacterRepo } from './ports/character-ports.js';
 import type { CanonicalChangeSetRepo } from './ports/canonical-change-set-ports.js';
+import type { FullTxPorts } from './ports/operational-ports.js';
 
 /**
  * Transaction-scoped ports: repos available only within a running transaction.
@@ -30,6 +31,17 @@ export interface UnitOfWorkOptions {
 export interface UnitOfWork {
   execute<T>(
     fn: (ports: TransactionPorts) => Promise<T>,
+    options?: UnitOfWorkOptions,
+  ): Promise<T>;
+}
+
+/**
+ * OperationalUnitOfWork provides a transaction boundary with full ports
+ * including operational (jobs, credit, attempts, etc.).
+ */
+export interface OperationalUnitOfWork {
+  execute<T>(
+    fn: (ports: FullTxPorts) => Promise<T>,
     options?: UnitOfWorkOptions,
   ): Promise<T>;
 }

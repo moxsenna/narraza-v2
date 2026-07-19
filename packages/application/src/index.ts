@@ -36,7 +36,7 @@ export type { Character, CreateCharacterInput, CharacterRepo } from './ports/cha
 export type { CanonicalChangeSet, CanonicalChangeOperation, CreateChangeSetInput, CreateChangeOperationInput, CanonicalChangeSetRepo } from './ports/canonical-change-set-ports.js';
 
 // Unit of Work
-export type { TransactionPorts, UnitOfWork, UnitOfWorkOptions } from './unit-of-work.js';
+export type { TransactionPorts, UnitOfWork, OperationalUnitOfWork, UnitOfWorkOptions } from './unit-of-work.js';
 
 // Authorization
 export { authorizeActiveUser } from './authz/authorize-active-user.js';
@@ -51,3 +51,52 @@ export type { LockFoundationInput, LockFoundationOutput, FoundationLockPorts } f
 // Character use cases
 export { upsertCharacter } from './use-cases/characters/upsert-character.js';
 export type { UpsertCharacterInput, UpsertCharacterOutput, CharacterUpsertPorts } from './use-cases/characters/upsert-character.js';
+
+// =============================================================================
+// M3 Operational ports
+// =============================================================================
+export type {
+  CreditQuote, CreditQuoteInput, CreditQuoteRepo,
+  GenerationJob, CreateGenerationJobInput, GenerationJobRepo,
+  GenerationAttempt, CreateGenerationAttemptInput, GenerationAttemptRepo,
+  WorkflowInvocation, CreateWorkflowInvocationInput, WorkflowInvocationRepo,
+  CreditReservation, CreateCreditReservationInput, CreditReservationRepo,
+  AttemptCostExposure, CreateAttemptCostExposureInput, AttemptCostExposureRepo,
+  UserConcurrencySlot, CreateUserConcurrencySlotInput, UserConcurrencySlotRepo,
+  OperationalTxPorts, FullTxPorts,
+} from './ports/operational-ports.js';
+
+// M3.1 CreditQuote
+export { issueQuote } from './use-cases/credit/issue-quote.js';
+export type { IssueQuoteInput, IssueQuoteOutput } from './use-cases/credit/issue-quote.js';
+export { confirmAndEnqueue } from './use-cases/credit/confirm-and-enqueue.js';
+export type { ConfirmAndEnqueueInput, ConfirmAndEnqueueOutput } from './use-cases/credit/confirm-and-enqueue.js';
+
+// M3.2 Job transitions
+export { transitionJobStatus, executionRetry } from './workflows/job-transitions.js';
+export type { TransitionOptions, JobStatus } from './workflows/job-transitions.js';
+
+// M3.3 Lease + fencing
+export {
+  claimJob, reclaimExpiredLease, assertLease,
+  publishUnderLease, renewLease, generateLeaseToken,
+} from './workflows/lease.js';
+export type { LeaseInfo } from './workflows/lease.js';
+
+// M3.4 Invocation winner
+export {
+  selectInvocationWinner, recordLateAttempt,
+} from './workflows/invocation-reducer.js';
+export type { InvocationWinnerResult } from './workflows/invocation-reducer.js';
+
+// M3.5 Attempt reconciliation
+export {
+  reconcileAttempt, reconcileJobAttempts,
+} from './reconciliation/attempt-reconcile.js';
+export type { ReconciliationResult } from './reconciliation/attempt-reconcile.js';
+
+// M3.6 Reservation closing
+export {
+  closeReservation, assertReservationCapacity,
+  createExposure, settleExposure, releaseExposure,
+} from './reconciliation/reservation-closing.js';
