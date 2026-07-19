@@ -15,11 +15,13 @@ async function requestBeatWriteAction(formData: FormData): Promise<void> {
 
   const projectId = formData.get('projectId') as string;
   const beatId = formData.get('beatId') as string;
-  if (!beatId) return;
+  const chapterId = (formData.get('chapterId') as string) || '';
+  const beatNumberRaw = formData.get('beatNumber') as string | null;
+  if (!beatId && (!chapterId || !beatNumberRaw)) return;
 
   const { lockOwnedProject, requestBeatWrite } = await import('@narraza/application');
   const { createProjectRepo, createPrismaOperationalUnitOfWork, getPrisma } = await import('../../../lib/server/db');
-  const { createMockAIExecutionPort } = await import('@narraza/ai');
+  const { createWebAIExecutionPort } = await import('../../../lib/server/ai');
 
   const projectRepo = createProjectRepo();
   try {
@@ -29,10 +31,26 @@ async function requestBeatWriteAction(formData: FormData): Promise<void> {
   }
 
   try {
-    const uow = createPrismaOperationalUnitOfWork(getPrisma());
-    const aiPort = createMockAIExecutionPort();
+    const prisma = getPrisma();
+    let resolvedChapterId = chapterId;
+    let resolvedBeatNumber = beatNumberRaw ? parseInt(beatNumberRaw, 10) : NaN;
+
+    if ((!resolvedChapterId || Number.isNaN(resolvedBeatNumber)) && beatId) {
+      const beat = await prisma.beat.findUnique({ where: { id: beatId } });
+      if (!beat) return;
+      resolvedChapterId = beat.chapterId;
+      resolvedBeatNumber = beat.beatNumber;
+    }
+    if (!resolvedChapterId || Number.isNaN(resolvedBeatNumber)) return;
+
+    const uow = createPrismaOperationalUnitOfWork();
+    const aiPort = createWebAIExecutionPort();
     await requestBeatWrite(uow, aiPort, {
-      userId: sessionUser.userId, projectId, beatId, requestId: `web-beat-${Date.now()}`,
+      userId: sessionUser.userId,
+      projectId,
+      chapterId: resolvedChapterId,
+      beatNumber: resolvedBeatNumber,
+      requestId: `web-beat-${Date.now()}`,
     });
   } catch {
     // silently handled
@@ -113,8 +131,6 @@ export default async function WritePage({
   if (project.foundationStatus !== 'locked') {
     redirect(`/projects/${projectId}/foundation`);
   }
-
-  const prisma = getPrisma();
 
   const chapters = await listChaptersWithBeats(projectId);
 

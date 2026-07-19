@@ -15,7 +15,7 @@ async function acceptConceptAction(formData: FormData): Promise<void> {
   if (!proposalGroupId || isNaN(altIndex) || altIndex < 1) return;
 
   const { lockOwnedProject, acceptConcept } = await import('@narraza/application');
-  const { createProjectRepo, createPrismaUnitOfWork, getPrisma } = await import('../../../lib/server/db');
+  const { createProjectRepo, createPrismaUnitOfWork } = await import('../../../lib/server/db');
 
   const projectRepo = createProjectRepo();
   try {
@@ -25,7 +25,7 @@ async function acceptConceptAction(formData: FormData): Promise<void> {
   }
 
   try {
-    const uow = createPrismaUnitOfWork(getPrisma());
+    const uow = createPrismaUnitOfWork();
     await uow.execute(async (ports: any) => {
       return acceptConcept(ports, {
         userId: sessionUser.userId,

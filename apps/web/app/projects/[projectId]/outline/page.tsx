@@ -11,8 +11,8 @@ async function generateOutlineAction(formData: FormData): Promise<void> {
   const projectId = formData.get('projectId') as string;
 
   const { lockOwnedProject, requestOutlineGenerate } = await import('@narraza/application');
-  const { createProjectRepo, createPrismaOperationalUnitOfWork, getPrisma } = await import('../../../lib/server/db');
-  const { createMockAIExecutionPort } = await import('@narraza/ai');
+  const { createProjectRepo, createPrismaOperationalUnitOfWork } = await import('../../../lib/server/db');
+  const { createWebAIExecutionPort } = await import('../../../lib/server/ai');
 
   const projectRepo = createProjectRepo();
   try {
@@ -22,8 +22,8 @@ async function generateOutlineAction(formData: FormData): Promise<void> {
   }
 
   try {
-    const uow = createPrismaOperationalUnitOfWork(getPrisma());
-    const aiPort = createMockAIExecutionPort();
+    const uow = createPrismaOperationalUnitOfWork();
+    const aiPort = createWebAIExecutionPort();
     await requestOutlineGenerate(uow, aiPort, {
       userId: sessionUser.userId,
       projectId,
@@ -60,7 +60,7 @@ async function acceptOutlineAction(formData: FormData): Promise<void> {
   if (!Array.isArray(chapters) || chapters.length === 0) return;
 
   const { lockOwnedProject, acceptOutlineBatch } = await import('@narraza/application');
-  const { createProjectRepo, createPrismaUnitOfWork, getPrisma } = await import('../../../lib/server/db');
+  const { createProjectRepo, createPrismaUnitOfWork } = await import('../../../lib/server/db');
 
   const projectRepo = createProjectRepo();
   try {
@@ -71,7 +71,7 @@ async function acceptOutlineAction(formData: FormData): Promise<void> {
 
   // chaptersJson must be AI pipeline output (from job result / proposal), never UI invention
   try {
-    const uow = createPrismaUnitOfWork(getPrisma());
+    const uow = createPrismaUnitOfWork();
     await uow.execute(async (ports: any) => {
       return acceptOutlineBatch(ports, {
         userId: sessionUser.userId,

@@ -109,9 +109,9 @@ export async function listPendingProposals(projectId: string) {
   return prisma.proposal.findMany({
     where: {
       status: 'pending',
-      group: { projectId },
+      proposalGroup: { projectId },
     },
-    include: { group: true },
+    include: { proposalGroup: true },
     orderBy: { createdAt: 'desc' },
     take: 50,
   });

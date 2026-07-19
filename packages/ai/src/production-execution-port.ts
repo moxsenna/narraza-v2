@@ -1,0 +1,317 @@
+// Production AIExecutionPort — real OpenRouter HTTP calls.
+// Shares plan/parse/classify/decide logic shape with mock port.
+// executeSingleAttempt hits OpenRouter; no silent mock fallback.
+
+import { randomUUID } from 'node:crypto';
+import type { z } from 'zod';
+import type {
+  AIExecutionPort,
+  AIWorkflowPlan,
+  BuildWorkflowPlanParams,
+  ExecuteSingleAttemptParams,
+  NextAction,
+  NormalizedProviderError,
+  SingleAttemptResponse,
+} from './types.js';
+
+export interface ProductionAIConfig {
+  openRouterApiKey: string;
+  geminiApiKey?: string;
+  defaultModelId?: string;
+  baseUrl?: string;
+}
+
+function getStagesForJobType(jobType: string, modelId: string) {
+  const routing = {
+    provider: 'openrouter',
+    modelId,
+    mode: 'structured',
+    timeoutMs: 60_000,
+  };
+  switch (jobType) {
+    case 'intake.extract':
+      return [
+        {
+          stageName: 'extract',
+          routingPlan: { ...routing, timeoutMs: 30_000 },
+          promptContractVersion: 'intake.extract.v1',
+          maxInvocations: 1,
+        },
+      ];
+    case 'foundation.propose':
+      return [
+        {
+          stageName: 'propose',
+          routingPlan: { ...routing, timeoutMs: 30_000 },
+          promptContractVersion: 'foundation.propose.v1',
+          maxInvocations: 1,
+        },
+      ];
+    case 'character.propose':
+      return [
+        {
+          stageName: 'propose',
+          routingPlan: { ...routing, timeoutMs: 30_000 },
+          promptContractVersion: 'character.propose.v1',
+          maxInvocations: 1,
+        },
+      ];
+    case 'outline.generate':
+      return [
+        {
+          stageName: 'generate',
+          routingPlan: { ...routing, timeoutMs: 30_000 },
+          promptContractVersion: 'outline.generate.v1',
+          maxInvocations: 1,
+        },
+      ];
+    case 'beat.write':
+      return [
+        {
+          stageName: 'write',
+          routingPlan: { ...routing },
+          promptContractVersion: 'beat.write.v1',
+          maxInvocations: 3,
+        },
+        {
+          stageName: 'judge',
+          routingPlan: { ...routing, timeoutMs: 30_000 },
+          promptContractVersion: 'beat.judge.v1',
+          maxInvocations: 1,
+        },
+      ];
+    case 'beat.repair':
+      return [
+        {
+          stageName: 'repair',
+          routingPlan: { ...routing },
+          promptContractVersion: 'beat.repair.v1',
+          maxInvocations: 1,
+        },
+        {
+          stageName: 'judge',
+          routingPlan: { ...routing, timeoutMs: 30_000 },
+          promptContractVersion: 'beat.judge.v1',
+          maxInvocations: 1,
+        },
+      ];
+    case 'publish.package':
+      return [
+        {
+          stageName: 'package',
+          routingPlan: { ...routing, timeoutMs: 30_000 },
+          promptContractVersion: 'publish.package.v1',
+          maxInvocations: 1,
+        },
+      ];
+    default:
+      return [
+        {
+          stageName: 'default',
+          routingPlan: { ...routing, timeoutMs: 30_000 },
+          promptContractVersion: 'intake.extract.v1',
+          maxInvocations: 1,
+        },
+      ];
+  }
+}
+
+function buildWorkflowPlan(
+  params: BuildWorkflowPlanParams,
+  modelId: string,
+): AIWorkflowPlan {
+  return {
+    planId: `plan-${params.jobType}-${Date.now()}`,
+    stages: getStagesForJobType(params.jobType, modelId),
+    createdAt: new Date().toISOString(),
+  };
+}
+
+function parseOutput<T>(contract: z.ZodType<T>, rawBody: string): T {
+  const parsed = JSON.parse(rawBody);
+  return contract.parse(parsed);
+}
+
+function classifyError(error: unknown): NormalizedProviderError {
+  if (error instanceof Error) {
+    const msg = error.message.toLowerCase();
+    if (msg.includes('timeout') || msg.includes('timed out')) {
+      return {
+        errorCode: 'PROVIDER_TIMEOUT',
+        message: error.message,
+        retryable: true,
+        retryStage: null,
+      };
+    }
+    if (msg.includes('rate limit') || msg.includes('429')) {
+      return {
+        errorCode: 'RATE_LIMITED',
+        message: error.message,
+        retryable: true,
+        retryStage: null,
+      };
+    }
+    if (msg.includes('unauthorized') || msg.includes('401') || msg.includes('403')) {
+      return {
+        errorCode: 'PROVIDER_AUTH',
+        message: error.message,
+        retryable: false,
+      };
+    }
+    return {
+      errorCode: 'PROVIDER_ERROR',
+      message: error.message,
+      retryable: true,
+    };
+  }
+  return {
+    errorCode: 'UNKNOWN_ERROR',
+    message: String(error),
+    retryable: false,
+  };
+}
+
+function decideNextAction(
+  attempt: SingleAttemptResponse | null,
+  error: NormalizedProviderError | null,
+  workflowPlan: AIWorkflowPlan,
+  currentInvocationKey: string,
+): NextAction {
+  if (error) {
+    if (!error.retryable) {
+      return { type: 'terminal', reason: `Non-retryable error: ${error.errorCode}` };
+    }
+    if (error.retryStage) {
+      return { type: 'next_candidate', invocationKey: error.retryStage };
+    }
+    return { type: 'terminal', reason: `Retryable but no retry stage: ${error.errorCode}` };
+  }
+  if (!attempt) {
+    return { type: 'terminal', reason: 'No attempt produced' };
+  }
+  const currentStageIdx = workflowPlan.stages.findIndex(
+    (s) => s.promptContractVersion === currentInvocationKey || s.stageName === currentInvocationKey,
+  );
+  if (currentStageIdx >= 0 && currentStageIdx < workflowPlan.stages.length - 1) {
+    const nextStage = workflowPlan.stages[currentStageIdx + 1]!;
+    return {
+      type: 'next_candidate',
+      invocationKey: `${nextStage.stageName}:${nextStage.invocationKey ?? 'v1'}`,
+    };
+  }
+  return { type: 'terminal', reason: 'All stages completed' };
+}
+
+/**
+ * Create production AIExecutionPort backed by OpenRouter Chat Completions.
+ */
+export function createProductionAIExecutionPort(
+  config: ProductionAIConfig,
+): AIExecutionPort {
+  if (!config.openRouterApiKey || config.openRouterApiKey.length < 20) {
+    throw new Error('createProductionAIExecutionPort: openRouterApiKey required');
+  }
+
+  const modelId = config.defaultModelId ?? 'openrouter/auto';
+  const baseUrl = config.baseUrl ?? 'https://openrouter.ai/api/v1';
+
+  async function executeSingleAttempt(
+    params: ExecuteSingleAttemptParams,
+  ): Promise<SingleAttemptResponse> {
+    const stage = params.workflowPlan.stages.find(
+      (s) => s.stageName === params.stageName,
+    );
+    const routeModel = stage?.routingPlan.modelId ?? modelId;
+    const timeoutMs = stage?.routingPlan.timeoutMs ?? 60_000;
+
+    const system = [
+      'You are a structured fiction-production assistant for Narraza.',
+      `Respond with JSON only matching contract ${params.promptContractVersion}.`,
+      'Do not include markdown fences or commentary.',
+    ].join(' ');
+
+    const userContent =
+      typeof params.promptPayload === 'string'
+        ? params.promptPayload
+        : JSON.stringify(params.promptPayload ?? {});
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const res = await fetch(`${baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${config.openRouterApiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://narraza.local',
+          'X-Title': 'Narraza v2 worker-gen',
+        },
+        body: JSON.stringify({
+          model: routeModel,
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user', content: userContent },
+          ],
+          response_format: { type: 'json_object' },
+          temperature: 0.4,
+        }),
+        signal: controller.signal,
+      });
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new Error(
+          `OpenRouter HTTP ${res.status}: ${text.slice(0, 300)}`,
+        );
+      }
+
+      const body = (await res.json()) as {
+        id?: string;
+        choices?: Array<{ message?: { content?: string } }>;
+        usage?: {
+          prompt_tokens?: number;
+          completion_tokens?: number;
+          total_tokens?: number;
+        };
+      };
+
+      const rawBody = body.choices?.[0]?.message?.content ?? '{}';
+      const usage = body.usage;
+
+      const result: SingleAttemptResponse = {
+        attemptId: randomUUID(),
+        stageName: params.stageName,
+        invocationKey: params.invocationKey,
+        rawBody,
+        completedAt: new Date().toISOString(),
+      };
+      if (body.id) {
+        result.providerRequestId = body.id;
+      }
+      if (usage) {
+        const providerUsage: NonNullable<SingleAttemptResponse['usage']> = {};
+        if (usage.prompt_tokens != null) providerUsage.inputTokens = usage.prompt_tokens;
+        if (usage.completion_tokens != null) providerUsage.outputTokens = usage.completion_tokens;
+        if (usage.total_tokens != null) providerUsage.totalTokens = usage.total_tokens;
+        result.usage = providerUsage;
+      }
+      return result;
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw new Error(`Provider timeout after ${timeoutMs}ms`);
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  return {
+    buildWorkflowPlan: (params) => buildWorkflowPlan(params, modelId),
+    executeSingleAttempt,
+    parseOutput,
+    classifyError,
+    decideNextAction,
+  };
+}

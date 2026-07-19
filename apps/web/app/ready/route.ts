@@ -121,11 +121,18 @@ async function runChecks(): Promise<ReadyCheck[]> {
   // -------------------------------------------------------------------------
   {
     const draining = process.env.NARRAZA_DRAINING === 'true';
-    checks.push({
-      name: 'operational:draining',
-      status: draining ? 'fail' : 'pass',
-      detail: draining ? 'Server is in draining mode — reject new traffic' : undefined,
-    });
+    if (draining) {
+      checks.push({
+        name: 'operational:draining',
+        status: 'fail',
+        detail: 'Server is in draining mode — reject new traffic',
+      });
+    } else {
+      checks.push({
+        name: 'operational:draining',
+        status: 'pass',
+      });
+    }
   }
 
   return checks;

@@ -8,9 +8,9 @@ name: CI
 
 on:
   pull_request:
-    branches: [main]
+    branches: [master]
   push:
-    branches: [main]
+    branches: [master]
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -189,21 +189,24 @@ jobs:
       # Build web app and scan .next for leaked secrets
       - name: Build web app then scan
         run: |
+          set -euo pipefail
           cd apps/web
-          npx next build || true
+          npx next build
           cd ../..
-          # Scan built JS for API key patterns — should not find any
-          if ls apps/web/.next/server/**/*.js 2>/dev/null; then
-            ! grep -rnE 'sk-[a-zA-Z0-9]{20,}' apps/web/.next/ || true
+          # Scan built JS for API key patterns — must not find any
+          if find apps/web/.next -name '*.js' -print -quit 2>/dev/null | grep -q .; then
+            if grep -rnE 'sk-[a-zA-Z0-9]{20,}' apps/web/.next/; then
+              echo "ERROR: possible secret leak in build output"
+              exit 1
+            fi
           fi
 
   # ─────────────────────────────────────────────────────────────
-  # Contract tests (DTO integrity — optional light gate)
+  # Contract tests (DTO / env integrity — hard gate)
   # ─────────────────────────────────────────────────────────────
   contract:
     name: Contract Tests
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -216,14 +219,11 @@ jobs:
       - run: npx vitest run --project packages/shared
 
   # ─────────────────────────────────────────────────────────────
-  # E2E (Playwright) — with mock AI
+  # E2E (Playwright) — with mock AI (hard gate)
   # ─────────────────────────────────────────────────────────────
   e2e:
     name: E2E (Playwright)
     runs-on: ubuntu-latest
-    # Only run e2e on PRs (not push to main) to save minutes
-    if: github.event_name == 'pull_request'
-    continue-on-error: true
     services:
       postgres:
         image: postgres:16-alpine

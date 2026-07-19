@@ -22,7 +22,7 @@ import {
   executeFoundationProposeJob,
   executeCharacterProposeJob,
 } from '@narraza/application';
-import { createMockAIExecutionPort } from '@narraza/ai';
+import { createAIExecutionPort } from '@narraza/ai';
 import { createGenerationJobRepo } from '@narraza/db/repositories/generation-job-repo.js';
 import { createGenerationAttemptRepo } from '@narraza/db/repositories/generation-attempt-repo.js';
 import { createCreditReservationRepo } from '@narraza/db/repositories/credit-reservation-repo.js';
@@ -124,7 +124,13 @@ async function processJob(
 
     // ---- DISPATCH TO JOB EXECUTOR ----
     const uow = createPrismaOperationalUnitOfWork(getPrisma());
-    const aiPort = createMockAIExecutionPort();
+    // Fail-fast factory: mock only when AI_ENABLE_MOCK=true and not production
+    const aiPort = createAIExecutionPort({
+      enableMock: process.env.AI_ENABLE_MOCK === 'true',
+      openRouterApiKey: process.env.OPENROUTER_API_KEY,
+      geminiApiKey: process.env.GEMINI_API_KEY,
+      nodeEnv: process.env.NODE_ENV,
+    });
     const payload = claimed.payloadJson as Record<string, unknown>;
     const jobType = claimed.jobType;
     const workflowPlan = (payload as any)?.workflowPlan ?? {};
@@ -214,8 +220,12 @@ async function processJob(
 }
 
 async function run() {
+  const workerDbUrl = process.env.DATABASE_URL_WORKER;
+  if (!workerDbUrl) {
+    throw new Error('DATABASE_URL_WORKER is required');
+  }
   const prisma = new PrismaClient({
-    datasources: { db: { url: process.env.DATABASE_URL_WORKER } },
+    datasources: { db: { url: workerDbUrl } },
   });
   setPrisma(prisma);
 

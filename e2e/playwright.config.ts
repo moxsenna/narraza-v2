@@ -61,12 +61,14 @@ export default defineConfig({
     command: 'npm run dev -w @narraza/web',
     cwd: repoRoot,
     url: 'http://localhost:3000',
-    reuseExistingServer: true,
+    // Prefer a clean server so stale .next / wrong env cannot mask failures.
+    reuseExistingServer: !process.env.CI,
     timeout: 180000,
     env: {
       ...process.env,
       ...rootEnv,
       NODE_ENV: 'development',
+      AI_ENABLE_MOCK: 'true',
     },
   },
 });

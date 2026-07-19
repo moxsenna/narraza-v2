@@ -13,6 +13,12 @@ export { validateBeliefTransition } from './knowledge-policy.js';
 export { foldDisclosures } from './disclosure-policy.js';
 export { evaluateRepairPolicy } from './repair-policy.js';
 export { checkFoundationReadiness } from './readiness-policy.js';
+export {
+  applyRevealPolicy,
+  classifyFactsForWriter,
+  type RevealPolicyFact,
+  type ApplyRevealPolicyInput,
+} from './reveal-policy.js';
 
 // Validators
 export { mergeFindings } from './validator/merge-findings.js';

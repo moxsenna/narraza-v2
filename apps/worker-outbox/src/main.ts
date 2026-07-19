@@ -110,8 +110,12 @@ async function processEvent(
 }
 
 async function run() {
+  const outboxDbUrl = process.env.DATABASE_URL_OUTBOX;
+  if (!outboxDbUrl) {
+    throw new Error('DATABASE_URL_OUTBOX is required');
+  }
   const prisma = new PrismaClient({
-    datasources: { db: { url: process.env.DATABASE_URL_OUTBOX } },
+    datasources: { db: { url: outboxDbUrl } },
   });
   setPrisma(prisma);
 

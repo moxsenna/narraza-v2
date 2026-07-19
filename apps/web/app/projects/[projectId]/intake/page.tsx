@@ -18,8 +18,8 @@ async function submitIntakeAction(formData: FormData): Promise<void> {
   }
 
   const { lockOwnedProject, requestIntake } = await import('@narraza/application');
-  const { createProjectRepo, createPrismaOperationalUnitOfWork, getPrisma } = await import('../../../lib/server/db');
-  const { createMockAIExecutionPort } = await import('@narraza/ai');
+  const { createProjectRepo, createPrismaOperationalUnitOfWork } = await import('../../../lib/server/db');
+  const { createWebAIExecutionPort } = await import('../../../lib/server/ai');
 
   const projectRepo = createProjectRepo();
   try {
@@ -29,8 +29,8 @@ async function submitIntakeAction(formData: FormData): Promise<void> {
   }
 
   try {
-    const uow = createPrismaOperationalUnitOfWork(getPrisma());
-    const aiPort = createMockAIExecutionPort();
+    const uow = createPrismaOperationalUnitOfWork();
+    const aiPort = createWebAIExecutionPort();
 
     await requestIntake(uow, aiPort, {
       userId: sessionUser.userId,

@@ -13,7 +13,7 @@ async function acceptProposalAction(formData: FormData): Promise<void> {
   if (!proposalId) return;
 
   const { lockOwnedProject, acceptProposal } = await import('@narraza/application');
-  const { createProjectRepo, createUserRepo, createPrismaUnitOfWork, getPrisma } = await import('../../../lib/server/db');
+  const { createProjectRepo, createUserRepo, createPrismaUnitOfWork } = await import('../../../lib/server/db');
 
   const projectRepo = createProjectRepo();
   try {
@@ -23,7 +23,7 @@ async function acceptProposalAction(formData: FormData): Promise<void> {
   }
 
   try {
-    const uow = createPrismaUnitOfWork(getPrisma());
+    const uow = createPrismaUnitOfWork();
     await uow.execute(async (ports: any) => {
       return acceptProposal(
         { ...ports, userRepo: createUserRepo() },

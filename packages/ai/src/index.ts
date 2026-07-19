@@ -3,6 +3,11 @@
 
 export * from './types.js';
 export { createMockAIExecutionPort } from './execution-port.js';
+export { createProductionAIExecutionPort } from './production-execution-port.js';
+export {
+  createAIExecutionPort,
+  type CreateAIExecutionPortOptions,
+} from './create-ai-execution-port.js';
 
 // Prompt contracts
 export {
