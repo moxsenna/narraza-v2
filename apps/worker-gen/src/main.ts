@@ -178,53 +178,34 @@ async function processJob(
       return;
     }
     // ---- END JOB DISPATCH ----
+    // Executors own attempt records + terminal job status when they succeed.
+    // Worker only closes reservation and handles post-dispatch cancel.
 
     // Check cancel requested after provider call (mid-provider drain)
     const midProviderJob = await jobRepo.findById(currentJobId);
     if (midProviderJob?.cancelRequestedAt) {
       // Drain: cancel was requested mid-provider.
       // Cost already incurred — do NOT publish, but record cost.
-      await transitionJobStatus(jobRepo, currentJobId, 'running', 'cancelled', {
-        terminalReasonCode: 'cancelled_mid_attempt',
-      });
+      if (midProviderJob.status === 'running') {
+        await transitionJobStatus(jobRepo, currentJobId, 'running', 'cancelled', {
+          terminalReasonCode: 'cancelled_mid_attempt',
+        });
+      }
       return;
     }
 
-    if (mockSuccess) {
-      // Create attempt record
-      const attemptNum = await jobRepo.incrementAttemptNumber(currentJobId);
-      if (attemptNum !== null) {
-        await attemptRepo.create({
-          generationJobId: currentJobId,
-          attemptNumber: attemptNum,
-          leaseToken: currentLeaseToken,
-        });
-      }
-
-      // Transition to succeeded
-      await transitionJobStatus(jobRepo, currentJobId, 'running', 'succeeded');
-
-      // Close reservation
-      try {
-        await closeReservation(
-          jobRepo, reservationRepo, exposureRepo, attemptRepo, slotRepo,
-          currentJobId,
-        );
-      } catch {
-        // Non-fatal: reservation closing can be repaired by reaper
-      }
-    } else {
-      // Execution retry
-      const job = await jobRepo.findById(currentJobId);
-      if (job && job.executionRetryCount < job.maxExecutionRetries) {
-        await transitionJobStatus(jobRepo, currentJobId, 'running', 'queued', {
-          executionRetryCount: job.executionRetryCount + 1,
-        });
-      } else {
-        await transitionJobStatus(jobRepo, currentJobId, 'running', 'failed', {
-          terminalReasonCode: 'max_execution_retries_exceeded',
-        });
-      }
+    // Close reservation after successful dispatch (terminal status set by executor)
+    try {
+      await closeReservation(
+        jobRepo,
+        reservationRepo,
+        exposureRepo,
+        attemptRepo,
+        slotRepo,
+        currentJobId,
+      );
+    } catch {
+      // Non-fatal: reservation closing can be repaired by reaper
     }
   } finally {
     currentJobId = null;
