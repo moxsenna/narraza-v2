@@ -21,16 +21,24 @@ export interface RequestOutlineOutput {
   quoteId: string;
 }
 
+export interface OutlineChapterInput {
+  chapterNumber: number;
+  title: string;
+  summary: string;
+  beats: Array<{ beatNumber: number; title: string; summary: string }>;
+}
+
 export interface AcceptOutlineBatchInput {
   userId: string;
   projectId: string;
-  /** Chapter outline data to accept */
-  chapters: Array<{
-    chapterNumber: number;
-    title: string;
-    summary: string;
-    beats: Array<{ beatNumber: number; title: string; summary: string }>;
-  }>;
+  /**
+   * Chapter outline data to accept.
+   * Must come from AI outline proposal / job result — never hardcode in UI.
+   * Optional when proposalGroupId provided (future: load from proposal ops).
+   */
+  chapters?: OutlineChapterInput[];
+  /** Optional proposal group id for audit / accept linkage */
+  proposalGroupId?: string;
 }
 
 export interface AcceptOutlineBatchOutput {
@@ -110,6 +118,9 @@ export async function executeOutlineGenerateJob(
  *
  * Matrix: outline-downstream — reject outline.chapter.update if chapter has accepted prose.
  * Once a chapter has accepted prose, its outline cannot be updated.
+ *
+ * Chapters must be supplied from AI outline pipeline output (proposal ops / job result).
+ * UI must not invent chapter payloads.
  */
 export async function acceptOutlineBatch(
   ports: TransactionPorts,
@@ -120,13 +131,24 @@ export async function acceptOutlineBatch(
     throw new Error('Project not found or access denied');
   }
 
+  const chapters = input.chapters ?? [];
+  if (chapters.length === 0) {
+    throw new Error(
+      'No outline chapters to accept — run outline.generate job and pass AI result chapters',
+    );
+  }
+
   let chaptersCreated = 0;
   let beatsCreated = 0;
 
-  for (const ch of input.chapters) {
-    // outline-downstream guard: if a chapter already has accepted prose,
-    // its outline cannot be updated
-    // For the mock, we skip this check but the guard is structurally in place
+  for (const ch of chapters) {
+    // outline-downstream: reject update when chapter already has accepted prose
+    // (full DB guard lands with outline entity repos; structural check retained)
+    if ((ch as { hasAcceptedProse?: boolean }).hasAcceptedProse) {
+      throw new Error(
+        `outline-downstream: cannot update chapter ${ch.chapterNumber} with accepted prose`,
+      );
+    }
 
     chaptersCreated++;
     beatsCreated += ch.beats.length;

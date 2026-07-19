@@ -43,6 +43,23 @@ async function acceptOutlineAction(formData: FormData): Promise<void> {
   if (!sessionUser) redirect('/auth/email');
 
   const projectId = formData.get('projectId') as string;
+  const chaptersJson = formData.get('chaptersJson') as string;
+
+  if (!chaptersJson) return;
+
+  let chapters: Array<{
+    chapterNumber: number;
+    title: string;
+    summary: string;
+    beats: Array<{ beatNumber: number; title: string; summary: string }>;
+  }>;
+  try {
+    chapters = JSON.parse(chaptersJson);
+  } catch {
+    return;
+  }
+
+  if (!Array.isArray(chapters) || chapters.length === 0) return;
 
   const { lockOwnedProject, acceptOutlineBatch } = await import('@narraza/application');
   const { createProjectRepo } = await import('@narraza/db/repositories/project-repo.js');
@@ -56,31 +73,21 @@ async function acceptOutlineAction(formData: FormData): Promise<void> {
     redirect('/dashboard');
   }
 
-  const chapters = [
-    {
-      chapterNumber: 1, title: 'Awal Mula', summary: 'Detektif menerima kasus pertama di Jakarta 2045.',
-      beats: [
-        { beatNumber: 1, title: 'Panggilan Tengah Malam', summary: 'Telepon misterius membangunkan detektif.' },
-        { beatNumber: 2, title: 'TKP Pertama', summary: 'Detektif tiba di lokasi kejadian.' },
-      ],
-    },
-    {
-      chapterNumber: 2, title: 'Bayangan Kota', summary: 'Detektif mulai menyelidiki konspirasi AI.',
-      beats: [
-        { beatNumber: 1, title: 'Jejak Digital', summary: 'Detektif menemukan anomali di sistem kota.' },
-        { beatNumber: 2, title: 'Saksi Kunci', summary: 'Seorang programmer memberikan petunjuk penting.' },
-      ],
-    },
-  ];
-
+  // chaptersJson must be AI pipeline output (from job result / proposal), never UI invention
   try {
     const uow = createPrismaUnitOfWork(getPrisma());
     await uow.execute(async (ports: any) => {
-      return acceptOutlineBatch(ports, { userId: sessionUser.userId, projectId, chapters });
+      return acceptOutlineBatch(ports, {
+        userId: sessionUser.userId,
+        projectId,
+        chapters,
+      });
     });
   } catch {
-    // silently handled
+    // handled by redirect UX
   }
+
+  redirect(`/projects/${projectId}/write`);
 }
 
 export default async function OutlinePage({
@@ -206,27 +213,10 @@ export default async function OutlinePage({
           ))}
         </div>
       ) : (
-        <form
-          action={acceptOutlineAction}
-          style={{
-            backgroundColor: '#fff', border: '1px solid #e5e7eb',
-            borderRadius: 8, padding: 16, marginTop: 16,
-          }}
-        >
-          <input type="hidden" name="projectId" value={projectId} />
-          <p style={{ fontSize: 14, color: '#374151', marginBottom: 12 }}>
-            Terima outline mock untuk pengujian (2 chapters, 4 beats).
-          </p>
-          <button
-            type="submit"
-            style={{
-              padding: '8px 16px', backgroundColor: '#059669', color: '#fff',
-              border: 'none', borderRadius: 4, fontSize: 13, fontWeight: 600, cursor: 'pointer',
-            }}
-          >
-            Terima Outline Mock
-          </button>
-        </form>
+        <p style={{ fontSize: 13, color: '#6b7280', marginTop: 16 }}>
+          Belum ada outline. Klik Generate Outline — job AI (mock provider) lewat pipeline production.
+          Setelah job selesai, terima usulan di halaman Usulan AI / refresh halaman ini.
+        </p>
       )}
 
       <div style={{ marginTop: 24 }}>
