@@ -11,9 +11,7 @@ async function generateOutlineAction(formData: FormData): Promise<void> {
   const projectId = formData.get('projectId') as string;
 
   const { lockOwnedProject, requestOutlineGenerate } = await import('@narraza/application');
-  const { createProjectRepo } = await import('@narraza/db/repositories/project-repo.js');
-  const { createPrismaOperationalUnitOfWork } = await import('@narraza/db/unit-of-work.js');
-  const { getPrisma } = await import('@narraza/db/client.js');
+  const { createProjectRepo, createPrismaOperationalUnitOfWork, getPrisma } = await import('../../../lib/server/db');
   const { createMockAIExecutionPort } = await import('@narraza/ai');
 
   const projectRepo = createProjectRepo();
@@ -62,9 +60,7 @@ async function acceptOutlineAction(formData: FormData): Promise<void> {
   if (!Array.isArray(chapters) || chapters.length === 0) return;
 
   const { lockOwnedProject, acceptOutlineBatch } = await import('@narraza/application');
-  const { createProjectRepo } = await import('@narraza/db/repositories/project-repo.js');
-  const { createPrismaUnitOfWork } = await import('@narraza/db/unit-of-work.js');
-  const { getPrisma } = await import('@narraza/db/client.js');
+  const { createProjectRepo, createPrismaUnitOfWork, getPrisma } = await import('../../../lib/server/db');
 
   const projectRepo = createProjectRepo();
   try {
@@ -101,8 +97,8 @@ export default async function OutlinePage({
   const { projectId } = await params;
 
   const { lockOwnedProject } = await import('@narraza/application');
-  const { createProjectRepo } = await import('@narraza/db/repositories/project-repo.js');
-  const { getPrisma } = await import('@narraza/db/client.js');
+  const { createProjectRepo } = await import('../../../lib/server/db');
+  const { listChapterOutlines, listGenerationJobs } = await import('../../../lib/server/project-reads');
 
   const projectRepo = createProjectRepo();
   try {
@@ -118,17 +114,9 @@ export default async function OutlinePage({
     redirect(`/projects/${projectId}/foundation`);
   }
 
-  const prisma = getPrisma();
-  const chapters = await prisma.chapterOutline.findMany({
-    where: { projectId },
-    orderBy: { chapterNumber: 'asc' },
-  });
+  const chapters = await listChapterOutlines(projectId);
 
-  const activeJobs = await prisma.generationJob.findMany({
-    where: { projectId, status: { in: ['queued', 'running'] } },
-    orderBy: { createdAt: 'desc' },
-    take: 3,
-  });
+  const activeJobs = await listGenerationJobs(projectId, { statuses: ['queued', 'running'], take: 3 });
 
   const PHASE_LABELS: Record<string, string> = {
     queued: 'Antrian', running: 'Menulis', succeeded: 'Selesai',

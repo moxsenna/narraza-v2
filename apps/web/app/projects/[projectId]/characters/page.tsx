@@ -17,7 +17,7 @@ async function addCharacterAction(formData: FormData): Promise<void> {
     return;
   }
 
-  const { createProjectRepo } = await import('@narraza/db/repositories/project-repo.js');
+  const { createProjectRepo } = await import('../../../lib/server/db');
   const projectRepo = createProjectRepo();
   try {
     await lockOwnedProject(projectRepo, projectId, sessionUser.userId);
@@ -26,9 +26,7 @@ async function addCharacterAction(formData: FormData): Promise<void> {
   }
 
   try {
-    const { createUserRepo } = await import('@narraza/db/repositories/user-repo.js');
-    const { createCharacterRepo } = await import('@narraza/db/repositories/character-repo.js');
-    const { createChangeSetRepo } = await import('@narraza/db/repositories/change-set-repo.js');
+    const { createUserRepo, createCharacterRepo, createChangeSetRepo } = await import('../../../lib/server/db');
 
     await upsertCharacter(
       {
@@ -58,7 +56,7 @@ export default async function CharactersPage({
 
   const { projectId } = await params;
 
-  const { createProjectRepo } = await import('@narraza/db/repositories/project-repo.js');
+  const { createProjectRepo } = await import('../../../lib/server/db');
   const projectRepo = createProjectRepo();
   try {
     await lockOwnedProject(projectRepo, projectId, sessionUser.userId);
@@ -73,7 +71,7 @@ export default async function CharactersPage({
     redirect(`/projects/${projectId}/foundation`);
   }
 
-  const { createCharacterRepo } = await import('@narraza/db/repositories/character-repo.js');
+  const { createCharacterRepo } = await import('../../../lib/server/db');
   const characterRepo = createCharacterRepo();
   const characters = await characterRepo.findActiveByProjectId(projectId);
 

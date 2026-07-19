@@ -18,9 +18,7 @@ async function requestBeatWriteAction(formData: FormData): Promise<void> {
   if (!beatId) return;
 
   const { lockOwnedProject, requestBeatWrite } = await import('@narraza/application');
-  const { createProjectRepo } = await import('@narraza/db/repositories/project-repo.js');
-  const { createPrismaOperationalUnitOfWork } = await import('@narraza/db/unit-of-work.js');
-  const { getPrisma } = await import('@narraza/db/client.js');
+  const { createProjectRepo, createPrismaOperationalUnitOfWork, getPrisma } = await import('../../../lib/server/db');
   const { createMockAIExecutionPort } = await import('@narraza/ai');
 
   const projectRepo = createProjectRepo();
@@ -54,8 +52,7 @@ async function saveWorkingDraftAction(formData: FormData): Promise<void> {
   if (!beatId || !content) return;
 
   const { lockOwnedProject } = await import('@narraza/application');
-  const { createProjectRepo } = await import('@narraza/db/repositories/project-repo.js');
-  const { getPrisma } = await import('@narraza/db/client.js');
+  const { createProjectRepo, getPrisma } = await import('../../../lib/server/db');
 
   const projectRepo = createProjectRepo();
   try {
@@ -101,8 +98,8 @@ export default async function WritePage({
   const { projectId } = await params;
 
   const { lockOwnedProject } = await import('@narraza/application');
-  const { createProjectRepo } = await import('@narraza/db/repositories/project-repo.js');
-  const { getPrisma } = await import('@narraza/db/client.js');
+  const { createProjectRepo } = await import('../../../lib/server/db');
+  const { listChaptersWithBeats, listGenerationJobs } = await import('../../../lib/server/project-reads');
 
   const projectRepo = createProjectRepo();
   try {
@@ -119,21 +116,11 @@ export default async function WritePage({
 
   const prisma = getPrisma();
 
-  const chapters = await prisma.chapterOutline.findMany({
-    where: { projectId },
-    include: { beats: { orderBy: { beatNumber: 'asc' } } },
-    orderBy: { chapterNumber: 'asc' },
-  });
+  const chapters = await listChaptersWithBeats(projectId);
 
-  const activeJobs = await prisma.generationJob.findMany({
-    where: { projectId, status: { in: ['queued', 'running'] } },
-    orderBy: { createdAt: 'desc' }, take: 5,
-  });
+  const activeJobs = await listGenerationJobs(projectId, { statuses: ['queued', 'running'], take: 5 });
 
-  const completedJobs = await prisma.generationJob.findMany({
-    where: { projectId, status: { in: ['succeeded', 'failed', 'dead'] } },
-    orderBy: { createdAt: 'desc' }, take: 5,
-  });
+  const completedJobs = await listGenerationJobs(projectId, { statuses: ['succeeded', 'failed', 'dead'], take: 5 });
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>

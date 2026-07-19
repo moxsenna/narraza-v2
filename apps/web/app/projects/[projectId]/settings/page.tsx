@@ -2,9 +2,8 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { getSessionUser } from '../../../lib/get-session-user';
 import { getCreditSummary } from '@narraza/application';
-import { createUserRepo } from '@narraza/db/repositories/user-repo.js';
-import { createLedgerRepo } from '@narraza/db/repositories/ledger-repo.js';
-import { getPrisma } from '@narraza/db/client.js';
+import { createUserRepo, createLedgerRepo } from '../../../lib/server/db';
+import { listActiveReservationsForCredit } from '../../../lib/server/project-reads';
 
 export default async function SettingsPage({
   params,
@@ -15,7 +14,6 @@ export default async function SettingsPage({
   if (!sessionUser) redirect('/auth/email');
 
   const { projectId } = await params;
-  const prisma = getPrisma();
 
   // Credit summary
   let credit: any = null;
@@ -34,15 +32,7 @@ export default async function SettingsPage({
         },
         reservationRepo: {
           listActiveByUserId: async (uid: string) => {
-            const rows = await prisma.creditReservation.findMany({
-              where: { userId: uid, status: { not: 'closed' } },
-            });
-            return rows.map((r) => ({
-              reservedAmount: r.reservedAmount,
-              settledAmount: r.settledAmount,
-              releasedAmount: r.releasedAmount,
-              openExposureAmount: 0n,
-            }));
+            return listActiveReservationsForCredit(uid);
           },
         },
       },

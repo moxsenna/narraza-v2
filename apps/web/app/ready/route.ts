@@ -70,15 +70,10 @@ async function runChecks(): Promise<ReadyCheck[]> {
   // 2. Database connectivity
   // -------------------------------------------------------------------------
   try {
-    // Dynamic import to keep server-only Prisma in server context
-    const { getPrisma } = await import('@narraza/db');
-    const prisma = getPrisma();
+    const { checkDbConnectivity } = await import('../lib/server/project-reads');
 
-    // Can we reach the database?
-    const dbResult = await prisma.$queryRawUnsafe<Array<{ result: number }>>(
-      'SELECT 1 AS result',
-    );
-    if (dbResult?.[0]?.result === 1) {
+    const connected = await checkDbConnectivity();
+    if (connected) {
       checks.push({ name: 'db:connectivity', status: 'pass' });
     } else {
       checks.push({ name: 'db:connectivity', status: 'fail', detail: 'Unexpected query result' });
@@ -97,41 +92,20 @@ async function runChecks(): Promise<ReadyCheck[]> {
   // 3. Migration version
   // -------------------------------------------------------------------------
   try {
-    const { getPrisma } = await import('@narraza/db');
-    const prisma = getPrisma();
+    const { countAppliedMigrations } = await import('../lib/server/project-reads');
 
-    // Query Prisma's internal migrations table
-    interface MigrationRow {
-      migration_name: string;
-      started_at: string;
-      finished_at: string | null;
-      rolled_back_at: string | null;
-      logs: string | null;
-    }
-
-    const migrations = await prisma.$queryRawUnsafe<MigrationRow[]>(
-      `SELECT migration_name, started_at, finished_at, rolled_back_at, logs
-       FROM _prisma_migrations
-       WHERE rolled_back_at IS NULL
-       ORDER BY finished_at DESC
-       LIMIT 1`,
-    );
-
-    if (migrations.length === 0) {
+    const migrationCount = await countAppliedMigrations();
+    if (migrationCount === 0) {
       checks.push({
         name: 'migration:version',
         status: 'fail',
         detail: 'No migrations found in _prisma_migrations table',
       });
     } else {
-      const latest = migrations[0]!;
-      const hasFailures = latest.logs?.toLowerCase().includes('error');
       checks.push({
         name: 'migration:version',
-        status: hasFailures ? 'warn' : 'pass',
-        detail: hasFailures
-          ? `Latest migration ${latest.migration_name} has errors in logs`
-          : `Latest: ${latest.migration_name} (${latest.finished_at ?? 'unknown'})`,
+        status: 'pass',
+        detail: `${migrationCount} migration(s) applied`,
       });
     }
   } catch (err) {

@@ -3,12 +3,13 @@ import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import { getSessionUser } from '../../lib/get-session-user';
 import { lockOwnedProject, computeProjectProgress, getCreditSummary } from '@narraza/application';
-import { createProjectRepo } from '@narraza/db/repositories/project-repo.js';
-import { createUserRepo } from '@narraza/db/repositories/user-repo.js';
-import { createLedgerRepo } from '@narraza/db/repositories/ledger-repo.js';
-import { createFoundationRepo } from '@narraza/db/repositories/foundation-repo.js';
-import { createCharacterRepo } from '@narraza/db/repositories/character-repo.js';
-import { getPrisma } from '@narraza/db/client.js';
+import { createProjectRepo, createUserRepo, createLedgerRepo, createFoundationRepo, createCharacterRepo } from '../../lib/server/db';
+import {
+  countChapterOutlines,
+  countBeatsForProject,
+  countActiveJobs,
+  listActiveReservationsForCredit,
+} from '../../lib/server/project-reads';
 
 export const metadata: Metadata = {
   title: 'Narraza - Project',
@@ -60,17 +61,12 @@ export default async function ProjectLayout({
   // Compute progress for sidebar highlighting
   const foundationRepo = createFoundationRepo();
   const characterRepo = createCharacterRepo();
-  const prisma = getPrisma();
 
   const foundation = await foundationRepo.findByProjectId(projectId);
   const characters = await characterRepo.findActiveByProjectId(projectId);
-  const chapterCount = await prisma.chapterOutline.count({ where: { projectId } });
-  const beatCount = await prisma.beat.count({
-    where: { chapter: { projectId } },
-  });
-  const activeJobCount = await prisma.generationJob.count({
-    where: { projectId, status: { in: ['queued', 'running'] } },
-  });
+  const chapterCount = await countChapterOutlines(projectId);
+  const beatCount = await countBeatsForProject(projectId);
+  const activeJobCount = await countActiveJobs(projectId);
 
   const progress = computeProjectProgress({
     hasIntake: foundation !== null,
@@ -97,15 +93,7 @@ export default async function ProjectLayout({
         },
         reservationRepo: {
           listActiveByUserId: async (uid: string) => {
-            const rows = await prisma.creditReservation.findMany({
-              where: { userId: uid, status: { not: 'closed' } },
-            });
-            return rows.map((r) => ({
-              reservedAmount: r.reservedAmount,
-              settledAmount: r.settledAmount,
-              releasedAmount: r.releasedAmount,
-              openExposureAmount: 0n,
-            }));
+            return listActiveReservationsForCredit(uid);
           },
         },
       },

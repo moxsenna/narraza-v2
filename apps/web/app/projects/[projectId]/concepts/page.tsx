@@ -15,9 +15,7 @@ async function acceptConceptAction(formData: FormData): Promise<void> {
   if (!proposalGroupId || isNaN(altIndex) || altIndex < 1) return;
 
   const { lockOwnedProject, acceptConcept } = await import('@narraza/application');
-  const { createProjectRepo } = await import('@narraza/db/repositories/project-repo.js');
-  const { createPrismaUnitOfWork } = await import('@narraza/db/unit-of-work.js');
-  const { getPrisma } = await import('@narraza/db/client.js');
+  const { createProjectRepo, createPrismaUnitOfWork, getPrisma } = await import('../../../lib/server/db');
 
   const projectRepo = createProjectRepo();
   try {
@@ -54,8 +52,8 @@ export default async function ConceptsPage({
   const { projectId } = await params;
 
   const { lockOwnedProject } = await import('@narraza/application');
-  const { createProjectRepo } = await import('@narraza/db/repositories/project-repo.js');
-  const { getPrisma } = await import('@narraza/db/client.js');
+  const { createProjectRepo } = await import('../../../lib/server/db');
+  const { listProposalGroupsForProject } = await import('../../../lib/server/project-reads');
 
   const projectRepo = createProjectRepo();
   try {
@@ -67,19 +65,7 @@ export default async function ConceptsPage({
   const project = await projectRepo.findById(projectId);
   if (!project) redirect('/dashboard');
 
-  const prisma = getPrisma();
-
-  const proposalGroups = await prisma.proposalGroup.findMany({
-    where: { projectId },
-    include: {
-      proposals: {
-        where: { status: 'pending' },
-        orderBy: { createdAt: 'asc' },
-      },
-    },
-    orderBy: { createdAt: 'desc' },
-    take: 10,
-  });
+  const proposalGroups = await listProposalGroupsForProject(projectId);
 
   return (
     <div style={{ maxWidth: 800, margin: '0 auto' }}>

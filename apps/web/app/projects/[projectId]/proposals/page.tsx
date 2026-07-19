@@ -13,10 +13,7 @@ async function acceptProposalAction(formData: FormData): Promise<void> {
   if (!proposalId) return;
 
   const { lockOwnedProject, acceptProposal } = await import('@narraza/application');
-  const { createProjectRepo } = await import('@narraza/db/repositories/project-repo.js');
-  const { createUserRepo } = await import('@narraza/db/repositories/user-repo.js');
-  const { createPrismaUnitOfWork } = await import('@narraza/db/unit-of-work.js');
-  const { getPrisma } = await import('@narraza/db/client.js');
+  const { createProjectRepo, createUserRepo, createPrismaUnitOfWork, getPrisma } = await import('../../../lib/server/db');
 
   const projectRepo = createProjectRepo();
   try {
@@ -49,8 +46,7 @@ async function rejectProposalAction(formData: FormData): Promise<void> {
   if (!proposalId) return;
 
   const { lockOwnedProject } = await import('@narraza/application');
-  const { createProjectRepo } = await import('@narraza/db/repositories/project-repo.js');
-  const { getPrisma } = await import('@narraza/db/client.js');
+  const { createProjectRepo, getPrisma } = await import('../../../lib/server/db');
 
   const projectRepo = createProjectRepo();
   try {
@@ -81,8 +77,7 @@ export default async function ProposalsPage({
   const { projectId } = await params;
 
   const { lockOwnedProject } = await import('@narraza/application');
-  const { createProjectRepo } = await import('@narraza/db/repositories/project-repo.js');
-  const { getPrisma } = await import('@narraza/db/client.js');
+  const { createProjectRepo, getPrisma } = await import('../../../lib/server/db');
 
   const projectRepo = createProjectRepo();
   try {

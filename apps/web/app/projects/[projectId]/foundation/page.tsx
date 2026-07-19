@@ -16,10 +16,7 @@ async function editFoundationAction(formData: FormData): Promise<void> {
   const pov = (formData.get('pov') as string)?.trim() || null;
 
   const { lockOwnedProject, editFoundation } = await import('@narraza/application');
-  const { createProjectRepo } = await import('@narraza/db/repositories/project-repo.js');
-  const { createUserRepo } = await import('@narraza/db/repositories/user-repo.js');
-  const { createFoundationRepo } = await import('@narraza/db/repositories/foundation-repo.js');
-  const { createChangeSetRepo } = await import('@narraza/db/repositories/change-set-repo.js');
+  const { createProjectRepo, createUserRepo, createFoundationRepo, createChangeSetRepo } = await import('../../../lib/server/db');
 
   const projectRepo = createProjectRepo();
   try {
@@ -64,9 +61,7 @@ async function lockFoundationAction(formData: FormData): Promise<void> {
   const confirm = formData.get('confirm') === 'true';
 
   const { lockOwnedProject, lockFoundation } = await import('@narraza/application');
-  const { createProjectRepo } = await import('@narraza/db/repositories/project-repo.js');
-  const { createUserRepo } = await import('@narraza/db/repositories/user-repo.js');
-  const { createFoundationRepo } = await import('@narraza/db/repositories/foundation-repo.js');
+  const { createProjectRepo, createUserRepo, createFoundationRepo } = await import('../../../lib/server/db');
 
   const projectRepo = createProjectRepo();
   try {
@@ -104,8 +99,7 @@ export default async function FoundationPage({
   const { projectId } = await params;
 
   const { lockOwnedProject } = await import('@narraza/application');
-  const { createProjectRepo } = await import('@narraza/db/repositories/project-repo.js');
-  const { createFoundationRepo } = await import('@narraza/db/repositories/foundation-repo.js');
+  const { createProjectRepo, createFoundationRepo } = await import('../../../lib/server/db');
 
   const projectRepo = createProjectRepo();
   try {

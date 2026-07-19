@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getSessionUser } from '../lib/get-session-user';
 import { listProjects } from '@narraza/application';
-import { createProjectRepo } from '@narraza/db/repositories/project-repo.js';
+import { createProjectRepo } from '../lib/server/db';
 
 export default async function DashboardPage() {
   const sessionUser = await getSessionUser();

@@ -18,11 +18,8 @@ async function createProjectAction(formData: FormData) {
   }
 
   const { createProject } = await import('@narraza/application');
-  const { createProjectRepo } = await import(
-    '@narraza/db/repositories/project-repo.js'
-  );
-  const { createUserRepo } = await import(
-    '@narraza/db/repositories/user-repo.js'
+  const { createProjectRepo, createUserRepo } = await import(
+    '../lib/server/db'
   );
 
   const requestId = `web-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;

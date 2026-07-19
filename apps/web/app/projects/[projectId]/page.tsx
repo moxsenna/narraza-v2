@@ -1,10 +1,12 @@
 import { redirect } from 'next/navigation';
 import { getSessionUser } from '../../lib/get-session-user';
 import { lockOwnedProject, computeProjectProgress } from '@narraza/application';
-import { createProjectRepo } from '@narraza/db/repositories/project-repo.js';
-import { createFoundationRepo } from '@narraza/db/repositories/foundation-repo.js';
-import { createCharacterRepo } from '@narraza/db/repositories/character-repo.js';
-import { getPrisma } from '@narraza/db/client.js';
+import { createProjectRepo, createFoundationRepo, createCharacterRepo } from '../../lib/server/db';
+import {
+  countChapterOutlines,
+  countBeatsForProject,
+  countActiveJobs,
+} from '../../lib/server/project-reads';
 
 export default async function ProjectHomePage({
   params,
@@ -28,17 +30,12 @@ export default async function ProjectHomePage({
 
   const foundationRepo = createFoundationRepo();
   const characterRepo = createCharacterRepo();
-  const prisma = getPrisma();
 
   const foundation = await foundationRepo.findByProjectId(projectId);
   const characters = await characterRepo.findActiveByProjectId(projectId);
-  const chapterCount = await prisma.chapterOutline.count({ where: { projectId } });
-  const beatCount = await prisma.beat.count({
-    where: { chapter: { projectId } },
-  });
-  const activeJobCount = await prisma.generationJob.count({
-    where: { projectId, status: { in: ['queued', 'running'] } },
-  });
+  const chapterCount = await countChapterOutlines(projectId);
+  const beatCount = await countBeatsForProject(projectId);
+  const activeJobCount = await countActiveJobs(projectId);
 
   const progress = computeProjectProgress({
     hasIntake: foundation !== null,

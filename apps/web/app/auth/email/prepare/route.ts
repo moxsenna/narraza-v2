@@ -13,25 +13,11 @@ export async function GET(request: NextRequest) {
 
   try {
     const { prepareConfirm } = await import('@narraza/application');
-    const { createChallengeRepo } = await import(
-      '@narraza/db/repositories/challenge-repo.js'
-    );
-    const { createUserRepo } = await import(
-      '@narraza/db/repositories/user-repo.js'
-    );
-    const { createSessionRepo } = await import(
-      '@narraza/db/repositories/session-repo.js'
-    );
-    const { createLedgerRepo } = await import(
-      '@narraza/db/repositories/ledger-repo.js'
+    const { createAuthPorts } = await import(
+      '../../../lib/server/db'
     );
 
-    const ports = {
-      challengeRepo: createChallengeRepo(),
-      userRepo: createUserRepo(),
-      sessionRepo: createSessionRepo(),
-      ledgerRepo: createLedgerRepo(),
-    };
+    const ports = createAuthPorts();
 
     const pepper = process.env.EMAIL_CHALLENGE_PEPPER!;
     const authSecret = process.env.AUTH_SECRET!;

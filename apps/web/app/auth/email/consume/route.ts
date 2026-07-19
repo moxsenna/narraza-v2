@@ -16,25 +16,11 @@ export async function POST(request: NextRequest) {
 
   try {
     const { consumeChallenge } = await import('@narraza/application');
-    const { createChallengeRepo } = await import(
-      '@narraza/db/repositories/challenge-repo.js'
-    );
-    const { createUserRepo } = await import(
-      '@narraza/db/repositories/user-repo.js'
-    );
-    const { createSessionRepo } = await import(
-      '@narraza/db/repositories/session-repo.js'
-    );
-    const { createLedgerRepo } = await import(
-      '@narraza/db/repositories/ledger-repo.js'
+    const { createAuthPorts } = await import(
+      '../../../lib/server/db'
     );
 
-    const ports = {
-      challengeRepo: createChallengeRepo(),
-      userRepo: createUserRepo(),
-      sessionRepo: createSessionRepo(),
-      ledgerRepo: createLedgerRepo(),
-    };
+    const ports = createAuthPorts();
 
     const authSecret = process.env.AUTH_SECRET!;
     const signupGrantMicro = BigInt(
