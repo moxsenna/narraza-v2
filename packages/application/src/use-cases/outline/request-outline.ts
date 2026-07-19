@@ -101,11 +101,50 @@ export async function executeOutlineGenerateJob(
   });
 
   const { OutlineGenerateContract } = await import('@narraza/ai');
-  aiPort.parseOutput(OutlineGenerateContract, response.rawBody);
+  const output = aiPort.parseOutput(OutlineGenerateContract, response.rawBody);
 
+  // Auto-materialize: persist chapters directly for vertical slice
   await uow.execute(async (ports) => {
-    const fullPorts = ports as unknown as FullTxPorts;
-    await fullPorts.generationJobRepo.transitionStatus(jobId, 'running', 'succeeded', {
+    const job = await ports.generationJobRepo.findById(jobId);
+    if (!job) throw new Error(`Job ${jobId} not found`);
+    const projectId = job.projectId;
+
+    for (const ch of output.chapters) {
+      // Upsert ChapterOutline
+      await ports.chapterOutlineRepo.upsert({
+        projectId,
+        chapterNumber: ch.chapterNumber,
+        title: ch.title,
+        summary: ch.summary,
+      });
+
+      // Upsert Chapter
+      await ports.chapterRepo.upsert({
+        projectId,
+        number: ch.chapterNumber,
+        title: ch.title,
+      });
+
+      // Find or create the chapter to get its id for beats
+      const chapter = await ports.chapterRepo.findByProjectAndNumber(projectId, ch.chapterNumber);
+      if (!chapter) throw new Error(`Failed to find/create chapter ${ch.chapterNumber}`);
+
+      for (const beat of ch.beats) {
+        // Create Beat if not exists
+        const existing = await ports.beatRepo.findByChapterAndNumber(chapter.id, beat.beatNumber);
+        if (!existing) {
+          await ports.beatRepo.create({
+            chapterId: chapter.id,
+            beatNumber: beat.beatNumber,
+            title: beat.title,
+            summary: beat.summary,
+          });
+        }
+      }
+    }
+
+    // Update job payload with result
+    await ports.generationJobRepo.transitionStatus(jobId, 'running', 'succeeded', {
       terminalAt: new Date(),
       terminalReasonCode: 'completed',
     });
@@ -141,16 +180,56 @@ export async function acceptOutlineBatch(
   let beatsCreated = 0;
 
   for (const ch of chapters) {
-    // outline-downstream: reject update when chapter already has accepted prose
-    // (full DB guard lands with outline entity repos; structural check retained)
-    if ((ch as { hasAcceptedProse?: boolean }).hasAcceptedProse) {
-      throw new Error(
-        `outline-downstream: cannot update chapter ${ch.chapterNumber} with accepted prose`,
-      );
+    // outline-downstream guard: reject update when any beat in chapter has accepted prose
+    const existingChapter = await ports.chapterRepo.findByProjectAndNumber(
+      input.projectId,
+      ch.chapterNumber,
+    );
+    if (existingChapter) {
+      const existingBeats = await ports.beatRepo.listByChapter(existingChapter.id);
+      const hasAcceptedProse = existingBeats.some((b) => b.acceptedProseVersionId !== null);
+      if (hasAcceptedProse) {
+        throw new Error(
+          `outline-downstream: cannot update chapter ${ch.chapterNumber} with accepted prose`,
+        );
+      }
     }
 
+    // Upsert ChapterOutline
+    await ports.chapterOutlineRepo.upsert({
+      projectId: input.projectId,
+      chapterNumber: ch.chapterNumber,
+      title: ch.title,
+      summary: ch.summary,
+    });
     chaptersCreated++;
     beatsCreated += ch.beats.length;
+
+    // Persist Chapter if not exists
+    let chapter = await ports.chapterRepo.findByProjectAndNumber(
+      input.projectId,
+      ch.chapterNumber,
+    );
+    if (!chapter) {
+      chapter = await ports.chapterRepo.create({
+        projectId: input.projectId,
+        number: ch.chapterNumber,
+        title: ch.title,
+      });
+    }
+
+    // Create beats
+    for (const beat of ch.beats) {
+      const existing = await ports.beatRepo.findByChapterAndNumber(chapter.id, beat.beatNumber);
+      if (!existing) {
+        await ports.beatRepo.create({
+          chapterId: chapter.id,
+          beatNumber: beat.beatNumber,
+          title: beat.title,
+          summary: beat.summary,
+        });
+      }
+    }
   }
 
   return { chaptersCreated, beatsCreated };
