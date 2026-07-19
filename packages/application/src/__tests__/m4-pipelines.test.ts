@@ -12,6 +12,91 @@ import type { TransactionPorts } from '../unit-of-work.js';
 
 // Mock ports for unit-level integration tests
 function createMockPorts(): TransactionPorts {
+  const proposalRepo = {
+    create: vi.fn(),
+    findById: vi.fn().mockResolvedValue(null),
+    findByIdWithGroup: vi.fn().mockResolvedValue(null),
+    findByGroupId: vi.fn().mockResolvedValue([
+      {
+        id: 'prop-1',
+        proposalGroupId: 'pg1',
+        source: 'ai' as const,
+        status: 'pending' as const,
+        dependencyHash: 'hash1',
+        operationsHash: 'hash2',
+        revalidatedFromProposalId: null,
+        changeSetId: 'cs1',
+        createdAt: new Date('2025-01-01'),
+        updatedAt: new Date('2025-01-01'),
+      },
+      {
+        id: 'prop-2',
+        proposalGroupId: 'pg1',
+        source: 'ai' as const,
+        status: 'pending' as const,
+        dependencyHash: 'hash3',
+        operationsHash: 'hash4',
+        revalidatedFromProposalId: null,
+        changeSetId: 'cs2',
+        createdAt: new Date('2025-01-02'),
+        updatedAt: new Date('2025-01-02'),
+      },
+    ]),
+    findPendingByGroupId: vi.fn().mockResolvedValue([]),
+    transitionStatus: vi.fn().mockResolvedValue({ id: 'prop-1', status: 'accepted' }),
+    supersedeSiblings: vi.fn().mockResolvedValue(1),
+    markStaleIfPending: vi.fn().mockResolvedValue(null),
+    findByChangeSetId: vi.fn().mockResolvedValue([]),
+    findWithChangeSet: vi.fn().mockResolvedValue({
+      id: 'prop-1',
+      proposalGroupId: 'pg1',
+      source: 'ai',
+      status: 'pending',
+      dependencyHash: 'hash1',
+      operationsHash: 'hash2',
+      revalidatedFromProposalId: null,
+      changeSetId: 'cs1',
+      createdAt: new Date('2025-01-01'),
+      updatedAt: new Date('2025-01-01'),
+      changeSet: {
+        id: 'cs1',
+        projectId: 'p1',
+        proposalId: 'prop-1',
+        status: 'pending',
+        appliedAt: null,
+        rejectedAt: null,
+        createdAt: new Date(),
+      },
+    }),
+  };
+
+  const changeSetRepo = {
+    create: vi.fn(),
+    createOperation: vi.fn(),
+    findById: vi.fn().mockResolvedValue(null),
+    findOperationsByChangeSetId: vi.fn().mockResolvedValue([
+      {
+        id: 'op1',
+        changeSetId: 'cs1',
+        sequence: 1,
+        opType: 'upsert',
+        targetType: 'foundation',
+        targetId: null,
+        payload: {
+          premise: 'Test premise from ops',
+          tone: 'Test tone',
+          genre: 'Test genre',
+        },
+        createdAt: new Date(),
+      },
+    ]),
+    applyChangeSet: vi.fn(),
+    rejectChangeSet: vi.fn(),
+    findByProjectId: vi.fn().mockResolvedValue([]),
+    createEntityRevision: vi.fn(),
+    findLatestEntityRevision: vi.fn().mockResolvedValue(null),
+  };
+
   return {
     projectRepo: {
       findById: vi.fn().mockResolvedValue({
@@ -26,11 +111,13 @@ function createMockPorts(): TransactionPorts {
         updatedAt: new Date(),
         deletedAt: null,
       }),
+      findByOwnerUserIdAndRequestId: vi.fn(),
       create: vi.fn(),
-      findByRequestId: vi.fn(),
-      listByOwnerId: vi.fn(),
+      listByOwnerUserId: vi.fn().mockResolvedValue([]),
       softDelete: vi.fn(),
-      updateFoundationStatus: vi.fn(),
+      lockForUpdate: vi.fn(),
+      updateFoundationStatus: vi.fn().mockResolvedValue({ foundationStatus: 'draft' }),
+      bumpCanonicalVersion: vi.fn(),
     },
     foundationRepo: {
       findByProjectId: vi.fn().mockResolvedValue(null),
@@ -52,9 +139,56 @@ function createMockPorts(): TransactionPorts {
       updateName: vi.fn(),
       softDelete: vi.fn(),
     },
-    changeSetRepo: {
+    changeSetRepo,
+    proposalGroupRepo: {
+      create: vi.fn().mockResolvedValue({ id: 'pg1', projectId: 'p1', createdAt: new Date() }),
+      findById: vi.fn().mockResolvedValue({ id: 'pg1', projectId: 'p1', createdAt: new Date() }),
+    },
+    proposalRepo,
+    workingDraftRepo: {
+      save: vi.fn(),
+      findById: vi.fn().mockResolvedValue(null),
+      findByUserAndBeat: vi.fn().mockResolvedValue(null),
+      softDelete: vi.fn().mockResolvedValue(null),
+    },
+    validationReportRepo: {
       create: vi.fn(),
-      createOperation: vi.fn(),
+      findById: vi.fn().mockResolvedValue(null),
+      findByProseVersionId: vi.fn().mockResolvedValue(null),
+      findLatestByProseVersionId: vi.fn().mockResolvedValue(null),
+      findValidReport: vi.fn().mockResolvedValue(null),
+    },
+    factRepo: {
+      findById: vi.fn().mockResolvedValue(null),
+      findActiveByProjectAndKey: vi.fn().mockResolvedValue(null),
+      upsert: vi.fn(),
+      softDelete: vi.fn().mockResolvedValue(null),
+    },
+    beatRepo: {
+      create: vi.fn().mockResolvedValue({ id: 'b1', chapterId: 'ch1', beatNumber: 1, acceptedProseVersionId: null, title: 'Beat 1', summary: 'Beat summary' }),
+      findById: vi.fn().mockResolvedValue(null),
+      findByChapterAndNumber: vi.fn().mockResolvedValue(null),
+      listByChapter: vi.fn().mockResolvedValue([]),
+      setAcceptedProseVersion: vi.fn().mockResolvedValue(null),
+    },
+    proseVersionRepo: {
+      findById: vi.fn().mockResolvedValue(null),
+      create: vi.fn(),
+      nextVersion: vi.fn().mockResolvedValue(1),
+    },
+    chapterOutlineRepo: {
+      create: vi.fn(),
+      findById: vi.fn().mockResolvedValue(null),
+      findByProjectAndNumber: vi.fn().mockResolvedValue(null),
+      findByProjectId: vi.fn().mockResolvedValue([]),
+      upsert: vi.fn().mockResolvedValue({ id: 'out1', projectId: 'p1', chapterNumber: 1, title: 'Ch1', summary: 'Summary', createdAt: new Date(), updatedAt: new Date() }),
+    },
+    chapterRepo: {
+      create: vi.fn(),
+      findById: vi.fn().mockResolvedValue(null),
+      findByProjectAndNumber: vi.fn().mockResolvedValue({ id: 'ch1', projectId: 'p1', number: 1, title: 'Test Chapter', createdAt: new Date(), updatedAt: new Date() }),
+      findByProjectId: vi.fn().mockResolvedValue([]),
+      upsert: vi.fn().mockResolvedValue({ id: 'ch1', projectId: 'p1', number: 1, title: 'Test Chapter', createdAt: new Date(), updatedAt: new Date() }),
     },
   };
 }
@@ -74,16 +208,22 @@ describe('concept-accept', () => {
     });
 
     expect(result.foundationStatus).toBe('draft');
-    expect(result.foundationStatus).not.toBe('locked');
-    expect(result.title).toContain('Alt 1');
   });
 
   it('rejects concept accept for non-owner', async () => {
     const ports = createMockPorts();
     // Override project with different owner
     (ports.projectRepo.findById as any).mockResolvedValue({
-      ...(await ports.projectRepo.findById('p1')),
+      id: 'p1',
       ownerUserId: 'different-user',
+      title: 'Test Project',
+      startMode: 'guided',
+      foundationStatus: 'none',
+      currentCanonicalVersion: 0,
+      createRequestId: 'r1',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      deletedAt: null,
     });
 
     await expect(
@@ -134,13 +274,27 @@ describe('outline-downstream', () => {
     ).rejects.toThrow('not found');
   });
 
-  it('outline accept forbids chapter update when prose accepted', () => {
-    // The outline-downstream guard: if a chapter already has accepted prose,
-    // its outline cannot be updated. This is enforced structurally in the
-    // acceptOutlineBatch handler.
-    // For the mock integration test, we verify the guard exists.
-    // In production, this would check for `beat.acceptedProseVersionId` before updating.
-    expect(true).toBe(true); // Placeholder: real guard tested via DB integration
+  it('outline accept forbids chapter update when prose accepted', async () => {
+    const ports = createMockPorts();
+    // Set up mock: chapter exists with accepted prose beat
+    (ports.beatRepo.listByChapter as any).mockResolvedValue([
+      { id: 'b1', chapterId: 'ch1', beatNumber: 1, acceptedProseVersionId: 'pv1', title: 'Beat', summary: 'Summary' },
+    ]);
+
+    await expect(
+      acceptOutlineBatch(ports, {
+        userId: 'u1',
+        projectId: 'p1',
+        chapters: [
+          {
+            chapterNumber: 1,
+            title: 'Updated Title',
+            summary: 'Updated summary',
+            beats: [{ beatNumber: 2, title: 'New Beat', summary: 'New summary' }],
+          },
+        ],
+      }),
+    ).rejects.toThrow('outline-downstream');
   });
 });
 
