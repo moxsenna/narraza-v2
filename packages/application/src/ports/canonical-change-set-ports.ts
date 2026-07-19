@@ -117,8 +117,18 @@ export interface Beat {
   summary: string | null;
 }
 
+export interface CreateBeatInput {
+  chapterId: string;
+  beatNumber: number;
+  title?: string | null;
+  summary?: string | null;
+}
+
 export interface BeatRepo {
+  create(input: CreateBeatInput): Promise<Beat>;
   findById(id: string): Promise<Beat | null>;
+  findByChapterAndNumber(chapterId: string, beatNumber: number): Promise<Beat | null>;
+  listByChapter(chapterId: string): Promise<Beat[]>;
   /** Set accepted prose pointer. Must satisfy composite FK (beat_id, prose_version_id). */
   setAcceptedProseVersion(
     beatId: string,

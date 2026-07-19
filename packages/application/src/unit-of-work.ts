@@ -8,12 +8,14 @@ import type {
   ProseVersionRepo,
 } from './ports/canonical-change-set-ports.js';
 import type { FullTxPorts } from './ports/operational-ports.js';
+export type { FullTxPorts } from './ports/operational-ports.js';
 import type {
   ProposalGroupRepo,
   ProposalRepo,
   ProseWorkingDraftRepo,
   ValidationReportRepo,
 } from './ports/proposal-ports.js';
+import type { ChapterOutlineRepo, ChapterRepo } from './ports/outline-ports.js';
 
 /**
  * Transaction-scoped ports: repos available only within a running transaction.
@@ -32,6 +34,8 @@ export interface TransactionPorts {
   factRepo: FactRepo;
   beatRepo: BeatRepo;
   proseVersionRepo: ProseVersionRepo;
+  chapterOutlineRepo: ChapterOutlineRepo;
+  chapterRepo: ChapterRepo;
 }
 
 export interface UnitOfWorkOptions {

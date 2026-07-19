@@ -78,6 +78,8 @@ export interface AcceptProposalPorts extends TransactionPorts, ProposalTxPorts {
   factRepo?: FactRepo;
   beatRepo?: BeatRepo;
   proseVersionRepo?: ProseVersionRepo;
+  chapterOutlineRepo?: TransactionPorts['chapterOutlineRepo'];
+  chapterRepo?: TransactionPorts['chapterRepo'];
 }
 
 /**

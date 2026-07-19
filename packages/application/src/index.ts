@@ -43,6 +43,7 @@ export type {
   Fact,
   FactRepo,
   Beat,
+  CreateBeatInput,
   BeatRepo,
   ProseVersion,
   ProseVersionRepo,

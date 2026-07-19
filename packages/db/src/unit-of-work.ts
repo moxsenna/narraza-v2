@@ -26,6 +26,8 @@ import { createTxValidationReportRepo } from './repositories/tx-validation-repor
 import { createTxFactRepo } from './repositories/tx-fact-repo.js';
 import { createTxBeatRepo } from './repositories/tx-beat-repo.js';
 import { createTxProseVersionRepo } from './repositories/tx-prose-version-repo.js';
+import { createTxChapterOutlineRepo } from './repositories/tx-chapter-outline-repo.js';
+import { createTxChapterRepo } from './repositories/tx-chapter-repo.js';
 import { Prisma } from '@prisma/client';
 
 const DEFAULT_MAX_RETRIES = 3;
@@ -85,6 +87,8 @@ export function createPrismaUnitOfWork(prisma: PrismaClient): UnitOfWork {
           factRepo: createTxFactRepo(tx),
           beatRepo: createTxBeatRepo(tx),
           proseVersionRepo: createTxProseVersionRepo(tx),
+          chapterOutlineRepo: createTxChapterOutlineRepo(tx),
+          chapterRepo: createTxChapterRepo(tx),
         };
         return fn(ports);
       }, options);
@@ -111,6 +115,8 @@ export function createPrismaOperationalUnitOfWork(prisma: PrismaClient): Operati
           factRepo: createTxFactRepo(tx),
           beatRepo: createTxBeatRepo(tx),
           proseVersionRepo: createTxProseVersionRepo(tx),
+          chapterOutlineRepo: createTxChapterOutlineRepo(tx),
+          chapterRepo: createTxChapterRepo(tx),
           creditQuoteRepo: createTxCreditQuoteRepo(tx),
           generationJobRepo: createTxGenerationJobRepo(tx),
           generationAttemptRepo: createTxGenerationAttemptRepo(tx),
