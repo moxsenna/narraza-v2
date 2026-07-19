@@ -188,13 +188,52 @@ export async function executeBeatJob(
       const beat = await ports.beatRepo.findByChapterAndNumber(chapterId, beatNumber);
       if (beat && prose) {
         const version = await ports.proseVersionRepo.nextVersion(beat.id);
-        await ports.proseVersionRepo.create({
+        const contentHash = createHash('sha256').update(prose).digest('hex');
+        const proseVersion = await ports.proseVersionRepo.create({
           beatId: beat.id,
           version,
           content: prose,
-          contentHash: createHash('sha256').update(prose).digest('hex'),
+          contentHash,
           status: 'draft',
         });
+
+        // P2: always run deterministic validation on generated/repaired prose
+        // and persist a report. Accept path will refuse blockers without override.
+        try {
+          const { runAndPersistProseValidation } = await import(
+            '../proposals/prose-validation-gate.js'
+          );
+          const payloadCtx = (payload.validationContext ?? {}) as Record<
+            string,
+            unknown
+          >;
+          await runAndPersistProseValidation(ports.validationReportRepo, {
+            proseContent: prose,
+            proseVersionId: proseVersion.id,
+            context: {
+              projectId: job.projectId,
+              beatId: beat.id,
+              chapterId,
+              chapterNumber:
+                typeof payload.chapterNumber === 'number'
+                  ? payload.chapterNumber
+                  : 0,
+              forbiddenTruths: Array.isArray(payloadCtx.forbiddenTruths)
+                ? (payloadCtx.forbiddenTruths as string[])
+                : Array.isArray(payload.forbiddenTruths)
+                  ? (payload.forbiddenTruths as string[])
+                  : [],
+              beatContract:
+                payloadCtx.beatContract &&
+                typeof payloadCtx.beatContract === 'object'
+                  ? (payloadCtx.beatContract as any)
+                  : undefined,
+            },
+          });
+        } catch {
+          // Validation persistence failure must not leave job hanging mid-success;
+          // accept gate will still require a report for prose_accept.
+        }
       }
     }
 

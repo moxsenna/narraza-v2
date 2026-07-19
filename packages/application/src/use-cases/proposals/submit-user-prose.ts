@@ -21,11 +21,22 @@ import { authorizeActiveUser } from '../../authz/authorize-active-user.js';
 import { lockOwnedProject } from '../../authz/lock-owned-project.js';
 import { InternalUseCaseError } from '@narraza/shared';
 import { createHash } from 'node:crypto';
+import {
+  runAndPersistProseValidation,
+  type ProseValidationContext,
+} from './prose-validation-gate.js';
 
 export interface SubmitUserProseInput {
   userId: string;
   projectId: string;
   beatId: string;
+  /**
+   * Optional validation context for deterministic gates.
+   * When omitted, a minimal context is built from project/beat ids.
+   */
+  validationContext?: ProseValidationContext;
+  chapterId?: string;
+  chapterNumber?: number;
 }
 
 export interface SubmitUserProseOutput {
@@ -94,13 +105,42 @@ export async function submitUserProse(
     .update(draft.version.toString())
     .digest('hex');
 
-  // 6. Create a CanonicalChangeSet
+  // 6. Snapshot working draft into immutable ProseVersion (new version always)
+  const nextVersion = await ports.proseVersionRepo.nextVersion(input.beatId);
+  const proseVersion = await ports.proseVersionRepo.create({
+    beatId: input.beatId,
+    version: nextVersion,
+    content: draft.content,
+    contentHash: draft.contentHash,
+    status: 'draft',
+  });
+
+  // 7. Run deterministic validators + persist report (fail-open for submit;
+  // accept path still blocks on blockers)
+  const validationContext: ProseValidationContext =
+    input.validationContext ?? {
+      projectId: input.projectId,
+      beatId: input.beatId,
+      chapterId: input.chapterId ?? input.beatId,
+      chapterNumber: input.chapterNumber ?? 0,
+    };
+
+  const validation = await runAndPersistProseValidation(
+    ports.validationReportRepo,
+    {
+      proseContent: draft.content,
+      proseVersionId: proseVersion.id,
+      context: validationContext,
+    },
+  );
+
+  // 8. Create a CanonicalChangeSet
   const changeSet = await ports.changeSetRepo.create({
     projectId: input.projectId,
     status: 'pending',
   });
 
-  // 7. Create a prose.accept operation in the change set
+  // 9. Create a prose.accept operation with proseVersionId + context for accept gate
   await ports.changeSetRepo.createOperation({
     changeSetId: changeSet.id,
     sequence: 1,
@@ -111,16 +151,22 @@ export async function submitUserProse(
       beatId: input.beatId,
       content: draft.content,
       contentHash: draft.contentHash,
+      proseVersionId: proseVersion.id,
+      chapterId: validationContext.chapterId,
+      chapterNumber: validationContext.chapterNumber,
       source: 'user',
+      validationContext,
+      validationBindingHash: validation.bindingHash,
+      validationPassed: validation.passed,
     },
   });
 
-  // 8. Create ProposalGroup
+  // 10. Create ProposalGroup
   const group = await ports.proposalGroupRepo.create({
     projectId: input.projectId,
   });
 
-  // 9. Create Proposal with source=user
+  // 11. Create Proposal with source=user
   const proposal = await ports.proposalRepo.create({
     proposalGroupId: group.id,
     source: 'user',
@@ -130,14 +176,11 @@ export async function submitUserProse(
     changeSetId: changeSet.id,
   });
 
-  // Update change set to link to proposal
-  // (In real implementation, this would be done atomically via the changeSetRepo)
-
   return {
     proposalGroupId: group.id,
     proposalId: proposal.id,
     changeSetId: changeSet.id,
-    proseVersionId: `pv-user-${Date.now()}`,
+    proseVersionId: proseVersion.id,
     dependencyHash,
     operationsHash,
   };

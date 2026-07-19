@@ -344,6 +344,28 @@ export type {
   SubmitUserProsePorts,
 } from './use-cases/proposals/submit-user-prose.js';
 
+// P2 Prose validation enforcement
+export {
+  PROSE_VALIDATOR_VERSION,
+  runAndPersistProseValidation,
+  assertProseAcceptEligible,
+  computeContextSnapshotHash,
+  computeValidationBindingHash,
+  extractProseAcceptPayload,
+} from './use-cases/proposals/prose-validation-gate.js';
+export type {
+  ProseValidationContext,
+  RunProseValidationInput,
+  RunProseValidationResult,
+  AssertProseAcceptEligibleInput,
+} from './use-cases/proposals/prose-validation-gate.js';
+export { createRepairProseVersion } from './use-cases/proposals/create-repair-prose-version.js';
+export type {
+  CreateRepairProseVersionInput,
+  CreateRepairProseVersionOutput,
+  CreateRepairProseVersionPorts,
+} from './use-cases/proposals/create-repair-prose-version.js';
+
 // M5.5 PublicProposalView DTO
 export {
   mapToPublicProposalView,

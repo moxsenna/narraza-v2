@@ -439,6 +439,58 @@ function makeInMemPorts() {
     },
   };
 
+  const proseVersions: any[] = [];
+  const proseVersionRepo = {
+    async findById(id: string) {
+      return proseVersions.find((p) => p.id === id) ?? null;
+    },
+    async create(input: any) {
+      const pv = {
+        id: `pv-${proseVersions.length + 1}`,
+        beatId: input.beatId,
+        version: input.version,
+        content: input.content,
+        contentHash: input.contentHash,
+        status: input.status ?? 'draft',
+        createdAt: new Date(),
+      };
+      proseVersions.push(pv);
+      return pv;
+    },
+    async nextVersion(beatId: string) {
+      const max = proseVersions
+        .filter((p) => p.beatId === beatId)
+        .reduce((m, p) => Math.max(m, p.version), 0);
+      return max + 1;
+    },
+  };
+
+  const beatRepo = {
+    async create() { return null; },
+    async findById() { return null; },
+    async findByChapterAndNumber() { return null; },
+    async listByChapter() { return []; },
+    async setAcceptedProseVersion() { return null; },
+  };
+
+  const factRepo = {
+    async findById() { return null; },
+    async findActiveByProjectAndKey() { return null; },
+    async upsert() { return null; },
+    async softDelete() { return null; },
+  };
+
+  const foundationRepo = {
+    async findByProjectId() { return null; },
+    async upsert() { return null; },
+  };
+
+  const characterRepo = {
+    async findById() { return null; },
+    async upsert() { return null; },
+    async listByProject() { return []; },
+  };
+
   const users = new Map<string, any>();
 
   const inMemUserRepo = {
@@ -463,6 +515,7 @@ function makeInMemPorts() {
     groups,
     drafts,
     reports,
+    proseVersions,
     entityRevisions,
     projects,
     changeSetRepo,
@@ -471,6 +524,11 @@ function makeInMemPorts() {
     proposalRepo,
     workingDraftRepo,
     validationReportRepo,
+    proseVersionRepo,
+    beatRepo,
+    factRepo,
+    foundationRepo,
+    characterRepo,
     userRepo: inMemUserRepo,
   };
 }
@@ -612,10 +670,23 @@ describe('acceptProposal', () => {
     });
 
     const hash = createHash('sha256').update('test').digest('hex');
+    const content = 'Hello world';
+    const contentHash = createHash('sha256').update(content).digest('hex');
+    const proseVersion = await ports.proseVersionRepo.create({
+      beatId: 'b1', version: 1, content, contentHash, status: 'draft',
+    });
+    await ports.validationReportRepo.create({
+      proseVersionId: proseVersion.id,
+      passed: true,
+      findings: [],
+      contentHash,
+    });
+
     const cs = await ports.changeSetRepo.create({ projectId: project.id });
     await ports.changeSetRepo.createOperation({
       changeSetId: cs.id, sequence: 1, opType: 'prose_accept',
-      targetType: 'beat', targetId: 'b1', payload: { content: 'Hello world' },
+      targetType: 'beat', targetId: 'b1',
+      payload: { content, contentHash, proseVersionId: proseVersion.id },
     });
 
     const group = await ports.proposalGroupRepo.create({ projectId: project.id });
@@ -640,6 +711,8 @@ describe('acceptProposal', () => {
       userId: 'u1',
       projectId: project.id,
       proposalId: proposal.id,
+      proseVersionId: proseVersion.id,
+      contentHash,
     });
 
     expect(result.newStatus).toBe('accepted');
@@ -721,10 +794,12 @@ describe('acceptProposal', () => {
     });
 
     const hash = createHash('sha256').update('supersede-test').digest('hex');
+    // Non-prose op so accept path does not require validation report
     const cs = await ports.changeSetRepo.create({ projectId: project.id });
     await ports.changeSetRepo.createOperation({
-      changeSetId: cs.id, sequence: 1, opType: 'prose_accept',
-      targetType: 'beat', targetId: 'b1', payload: {},
+      changeSetId: cs.id, sequence: 1, opType: 'upsert_fact',
+      targetType: 'fact', targetId: 'f1',
+      payload: { factKey: 'k', truth: 'Harbor exists', projectId: project.id },
     });
 
     const group = await ports.proposalGroupRepo.create({ projectId: project.id });
