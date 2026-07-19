@@ -100,3 +100,30 @@ export {
   closeReservation, assertReservationCapacity,
   createExposure, settleExposure, releaseExposure,
 } from './reconciliation/reservation-closing.js';
+
+// M3.7 Cancel job
+export { cancelJob, tombstoneMidAttempt } from './use-cases/jobs/cancel-job.js';
+export type { CancelJobInput, CancelJobOutput } from './use-cases/jobs/cancel-job.js';
+
+// M3.8 Retry job
+export { retryJob } from './use-cases/jobs/retry-job.js';
+export type { RetryJobInput, RetryJobOutput } from './use-cases/jobs/retry-job.js';
+
+// M3.9 Outbox
+export {
+  publishOutboxEvent, processOutboxEvent, replayOutboxEvent,
+} from './workflows/outbox.js';
+export type {
+  PublishOutboxInput, PublishOutboxOutput,
+  ProcessOutboxInput, ProcessOutboxOutput,
+  ReplayOutboxInput, ReplayOutboxOutput,
+} from './workflows/outbox.js';
+export type {
+  OutboxEvent, CreateOutboxEventInput, OutboxEventRepo,
+  OutboxConsumerReceipt, CreateOutboxConsumerReceiptInput, OutboxConsumerReceiptRepo,
+  WorkerInstance, CreateWorkerInstanceInput, WorkerInstanceRepo,
+} from './ports/operational-ports.js';
+
+// M3.10 Reaper
+export { reap, fullReaperCycle } from './reconciliation/reaper.js';
+export type { ReaperResult } from './reconciliation/reaper.js';
