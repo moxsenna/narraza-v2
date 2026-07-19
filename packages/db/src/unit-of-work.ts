@@ -17,6 +17,8 @@ import { createTxWorkflowInvocationRepo } from './repositories/tx-workflow-invoc
 import { createTxCreditReservationRepo } from './repositories/tx-credit-reservation-repo.js';
 import { createTxAttemptCostExposureRepo } from './repositories/tx-attempt-cost-exposure-repo.js';
 import { createTxUserConcurrencySlotRepo } from './repositories/tx-user-concurrency-slot-repo.js';
+import { createTxOutboxEventRepo } from './repositories/tx-outbox-event-repo.js';
+import { createTxOutboxConsumerReceiptRepo } from './repositories/tx-outbox-consumer-receipt-repo.js';
 import { Prisma } from '@prisma/client';
 
 const DEFAULT_MAX_RETRIES = 3;
@@ -95,6 +97,8 @@ export function createPrismaOperationalUnitOfWork(prisma: PrismaClient): Operati
           creditReservationRepo: createTxCreditReservationRepo(tx),
           attemptCostExposureRepo: createTxAttemptCostExposureRepo(tx),
           concurrencySlotRepo: createTxUserConcurrencySlotRepo(tx),
+          outboxEventRepo: createTxOutboxEventRepo(tx),
+          outboxConsumerReceiptRepo: createTxOutboxConsumerReceiptRepo(tx),
         };
         return fn(ports);
       }, options);
