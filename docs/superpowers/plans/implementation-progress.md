@@ -1,49 +1,49 @@
 # Narraza Implementation Progress
 
 ## Current milestone
-M1 — Schema splits + core pure domain
+M3 — Jobs, credit, S8 reliability
 
 ## Last completed task
-M0.5 — dashboard + create project (8 tests)
+M2.4 — user-origin character upsert
 
 ## Current task
-M1.1a/b migrations + M1.2–M1.5 core domain (parallel)
+M3.0 — Migration jobs/credits/outbox
 
 ## Tests currently green
-- `@narraza/shared` env parsers (5) — `env-boundary`
-- `@narraza/application` auth-challenge (12) — `challenge-cap`, magic-link prepare/consume
-- `@narraza/application` create-project (8)
-- Total: 25 tests
+- `@narraza/shared` (5)
+- `@narraza/core` (67) — writer-packet, dependency-hash, stale-policy, expression, belief, disclosure, repair, merge-findings, readiness
+- `@narraza/db` (11) — m1-schema, unit-of-work
+- `@narraza/application` (46) — auth, project, active-user, foundation, character
+- architecture: no violations
+- **Total: 129 tests**
 
 ## Known failures
 - none
-- Note: web tsc has pre-existing workspace import path noise; Next runtime OK
+- Vitest Node 24: use `--pool=forks --poolOptions.forks.singleFork=true`
+- Postgres host port 5433
 
 ## Decisions made
 - Workspace: `D:/Coding/Narraza Fix/narraza v2`
-- Postgres host port **5433** (5432 taken by alie-postgres)
-- Jobs/leases → M3.0 only
+- M1 migrations combined into single `m1_all_canon_prose`
+- M2 minimal `commitUserFoundationChange` path (full commitCanonicalChangeSet expands M5)
+- Jobs/leases start M3.0
 - foundation.propose always available after concept
 - Signup grant on first consume provisioning
 - Env pick-then-parse
-- Node engines `>=22` (host Node 24)
-- Auth Secure cookie flag deferred (local HTTP); production must set Secure
-- Max-3 challenge cap race accepted for M0; tighten with txn later if needed
 
 ## Next exact command
-Continue M1: canon migration + packages/core writer-packet TDD
+Implement M3.0 schema migration for jobs/credits/outbox, then reliability suite.
 
-## Git status
+## Git status (tip)
 ```
-b91f607 feat(web): start paths and dashboard project list
-d23a085 feat(auth): two-step magic link with challenge cap and signup grant
-6e9bcdc feat(db): m0 identity session challenge project
-adc60cd feat(shared): explicit env pick parsers and public errors
-33fc9ab chore: init monorepo workspace
-d19c22e docs(spec): add locked design S1-S10, verification matrix, PRD
-f9defe2 docs(plan): make Narraza implementation plan executable
+129636f feat(application): user-origin character upsert
+724d9e3 feat(application): foundation edit and lock
+c224740 feat(application): active user guard and owned locks
+1d8f8fd feat(db): serializable unit of work
 ```
-Working tree clean after progress journal commit.
 
-## M0 gate
-✅ shared env, challenge suite, create+list project — all green. M0 closed.
+## Milestone gates
+- M0 ✅
+- M1 ✅
+- M2 ✅ (create project → edit foundation → lock confirm → add character)
+- M3 in progress

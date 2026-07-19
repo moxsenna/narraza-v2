@@ -143,7 +143,8 @@ describe('cancel-queued (M3.7)', () => {
       requestId: `req-ct-${Date.now()}-${randomUUID().slice(0, 8)}`,
     });
 
-    await transitionJobStatus(jobRepo, job.id, 'queued', 'succeeded');
+    await transitionJobStatus(jobRepo, job.id, 'queued', 'running');
+    await transitionJobStatus(jobRepo, job.id, 'running', 'succeeded');
 
     const result = await cancelJob(
       jobRepo, reservationRepo, exposureRepo, attemptRepo, slotRepo,

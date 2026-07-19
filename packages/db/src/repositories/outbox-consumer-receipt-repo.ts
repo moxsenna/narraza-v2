@@ -39,8 +39,9 @@ export function createOutboxConsumerReceiptRepo(): OutboxConsumerReceiptRepo {
     },
     async markCompleted(id: string): Promise<OutboxConsumerReceipt | null> {
       try {
+        // Allow complete from processing or uncertain (re-drive after external side effect)
         const r = await prisma.outboxConsumerReceipt.update({
-          where: { id, status: 'processing' },
+          where: { id, status: { in: ['processing', 'uncertain'] } },
           data: { status: 'completed' },
         });
         return toDTO(r as unknown as Record<string, unknown>);
