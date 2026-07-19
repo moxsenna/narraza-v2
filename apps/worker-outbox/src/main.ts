@@ -148,6 +148,19 @@ async function run() {
 async function shutdown(signal: string) {
   console.log(`[worker-outbox ${INSTANCE_ID}] Received ${signal}, draining...`);
   draining = true;
+
+  // Persist draining state to DB so readiness endpoint can detect it
+  try {
+    const { getPrisma } = await import('@narraza/db');
+    const p = getPrisma();
+    await p.workerInstance.update({
+      where: { instanceId: INSTANCE_ID },
+      data: { draining: true, lastHeartbeatAt: new Date() },
+    });
+  } catch {
+    // Non-fatal: worker may already be gone from DB
+  }
+
   console.log(`[worker-outbox ${INSTANCE_ID}] Drain complete, exiting.`);
   process.exit(0);
 }
@@ -156,7 +169,7 @@ process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
 
 // Run if this is the entry point (not imported)
-const isEntryPoint = process.argv[1]?.includes('main');
+const isEntryPoint = process.argv[1]?.endsWith('main.js') || process.argv[1]?.endsWith('main.ts');
 if (isEntryPoint) {
   run().catch((err) => {
     console.error(`[worker-outbox ${INSTANCE_ID}] Fatal:`, err);
