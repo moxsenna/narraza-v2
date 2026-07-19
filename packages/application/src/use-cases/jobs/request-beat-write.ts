@@ -46,17 +46,16 @@ export async function requestBeatWrite(
   const depManifest = buildDependencyManifest([]);
   const dependencyHash = depManifest.hash;
 
-  const quote = await issueQuote({} as any, {
-    userId: input.userId,
-    workflowPlanHash,
-    dependencyHash,
-    estimatedMaximumMicroIdr: 5000000n,
-    ttlSeconds: 300,
-  });
-
   return uow.execute(async (ports) => {
-    const fullPorts = ports as unknown as FullTxPorts;
-    return confirmAndEnqueue(fullPorts, {
+    const quote = await issueQuote(ports.creditQuoteRepo, {
+      userId: input.userId,
+      workflowPlanHash,
+      dependencyHash,
+      estimatedMaximumMicroIdr: 5000000n,
+      ttlSeconds: 300,
+    });
+
+    return confirmAndEnqueue(ports, {
       userId: input.userId,
       projectId: input.projectId,
       quoteId: quote.quoteId,
@@ -210,17 +209,16 @@ export async function requestBeatRepair(
   const depManifest = buildDependencyManifest([]);
   const dependencyHash = depManifest.hash;
 
-  const quote = await issueQuote({} as any, {
-    userId: input.userId,
-    workflowPlanHash,
-    dependencyHash,
-    estimatedMaximumMicroIdr: 3000000n,
-    ttlSeconds: 300,
-  });
-
   return uow.execute(async (ports) => {
-    const fullPorts = ports as unknown as FullTxPorts;
-    return confirmAndEnqueue(fullPorts, {
+    const quote = await issueQuote(ports.creditQuoteRepo, {
+      userId: input.userId,
+      workflowPlanHash,
+      dependencyHash,
+      estimatedMaximumMicroIdr: 3000000n,
+      ttlSeconds: 300,
+    });
+
+    return confirmAndEnqueue(ports, {
       userId: input.userId,
       projectId: input.projectId,
       quoteId: quote.quoteId,

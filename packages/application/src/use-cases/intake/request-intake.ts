@@ -29,7 +29,7 @@ export interface RequestIntakeOutput {
  *
  * 1. Build dependency manifest from current state (empty for initial intake)
  * 2. Build workflow plan hash
- * 3. Issue credit quote
+ * 3. Issue credit quote within transaction
  * 4. Confirm quote → create job → enqueue
  */
 export async function requestIntake(
@@ -52,22 +52,17 @@ export async function requestIntake(
   const depManifest = buildDependencyManifest([]);
   const dependencyHash = depManifest.hash;
 
-  // Issue quote
-  const quote = await issueQuote(
-    {} as any, // quoteRepo will be provided through the UoW when used with full ports
-    {
+  // Issue quote and confirm within transaction
+  const result = await uow.execute(async (ports) => {
+    const quote = await issueQuote(ports.creditQuoteRepo, {
       userId: input.userId,
       workflowPlanHash,
       dependencyHash,
       estimatedMaximumMicroIdr: 1000000n, // ~10 cents mock
       ttlSeconds: 300,
-    },
-  );
+    });
 
-  // Confirm and enqueue
-  const result = await uow.execute(async (ports) => {
-    const fullPorts = ports as unknown as FullTxPorts;
-    return confirmAndEnqueue(fullPorts, {
+    return confirmAndEnqueue(ports, {
       userId: input.userId,
       projectId: input.projectId,
       quoteId: quote.quoteId,
