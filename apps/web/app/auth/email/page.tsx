@@ -12,11 +12,9 @@ export default function AuthEmailPage() {
             throw new Error('Invalid email');
           }
 
-          // Import and call issueChallenge
-          const { issueChallenge } = await import(
-            '@narraza/application/use-cases/auth/issue-challenge.js'
+          const { issueChallenge, sendDevMail } = await import(
+            '@narraza/application'
           );
-          const { getPrisma } = await import('@narraza/db/client.js');
           const { createChallengeRepo } = await import(
             '@narraza/db/repositories/challenge-repo.js'
           );
@@ -40,14 +38,10 @@ export default function AuthEmailPage() {
           const pepper = process.env.EMAIL_CHALLENGE_PEPPER!;
           const result = await issueChallenge(ports, { email }, pepper);
 
-          const { sendDevMail } = await import(
-            '@narraza/application/use-cases/auth/dev-mail-transport.js'
-          );
-
-          const link = `${process.env.AUTH_URL}/auth/email/confirm?token=${result.rawToken}`;
+          const link = `${process.env.AUTH_URL}/auth/email/prepare?token=${result.rawToken}`;
           const mailDir = process.env.MAIL_FILE_DIR ?? '.data/mail';
 
-          if (process.env.MAIL_TRANSPORT === 'file') {
+          if ((process.env.MAIL_TRANSPORT ?? 'file') === 'file') {
             await sendDevMail(mailDir, {
               to: email,
               subject: 'Your Narraza login link',

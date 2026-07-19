@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { getSessionUser } from '../lib/get-session-user.js';
+import { getSessionUser } from '../lib/get-session-user';
 
 async function createProjectAction(formData: FormData) {
   'use server';

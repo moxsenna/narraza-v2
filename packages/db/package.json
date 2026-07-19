@@ -10,9 +10,17 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./client.js": {
+      "types": "./dist/client.d.ts",
+      "import": "./dist/client.js"
+    },
+    "./unit-of-work.js": {
+      "types": "./dist/unit-of-work.d.ts",
+      "import": "./dist/unit-of-work.js"
+    },
     "./repositories/*": {
-      "types": "./dist/repositories/*.d.ts",
-      "import": "./dist/repositories/*.js"
+      "types": "./dist/repositories/*",
+      "import": "./dist/repositories/*"
     }
   },
   "scripts": {

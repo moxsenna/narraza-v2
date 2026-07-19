@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
-import { getSessionUser } from '../../lib/get-session-user.js';
+import { getSessionUser } from '../../lib/get-session-user';
 import { lockOwnedProject, computeProjectProgress, getCreditSummary } from '@narraza/application';
 import { createProjectRepo } from '@narraza/db/repositories/project-repo.js';
 import { createUserRepo } from '@narraza/db/repositories/user-repo.js';

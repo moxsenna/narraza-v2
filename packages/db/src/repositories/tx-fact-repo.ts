@@ -89,14 +89,21 @@ export function createTxFactRepo(tx: TxClient): FactRepo {
         return map(row);
       }
 
+      const createData: {
+        id?: string;
+        projectId: string;
+        factKey: string;
+        truth: string;
+        canonStatus: 'confirmed' | 'deprecated' | 'contradicted';
+      } = {
+        projectId: input.projectId,
+        factKey: input.factKey,
+        truth: input.truth,
+        canonStatus: input.canonStatus ?? 'confirmed',
+      };
+      if (input.id) createData.id = input.id;
       const row = await tx.fact.create({
-        data: {
-          id: input.id,
-          projectId: input.projectId,
-          factKey: input.factKey,
-          truth: input.truth,
-          canonStatus: input.canonStatus ?? 'confirmed',
-        },
+        data: createData,
       });
       return map(row);
     },

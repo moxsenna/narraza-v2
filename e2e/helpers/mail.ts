@@ -1,87 +1,122 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const MAIL_DIR = path.resolve(process.cwd(), '.data', 'mail');
-
-/**
- * Read the latest magic link token from the .data/mail/ directory.
- * Waits up to `timeoutMs` for a new email to arrive.
- */
-export async function getLatestMagicLinkToken(
-  options?: Partial<{ timeoutMs: number; waitForNewCount: number }>,
-): Promise<string | null> {
-  const timeoutMs = options?.timeoutMs ?? 15000;
-  const startAt = Date.now();
-
-  // Ensure directory exists
-  if (!fs.existsSync(MAIL_DIR)) {
-    throw new Error(`Mail directory not found: ${MAIL_DIR}. Is MAIL_TRANSPORT=file configured?`);
-  }
-
-  let initialFiles = fs.readdirSync(MAIL_DIR).filter((f) => f.endsWith('.txt'));
-  const startCount = initialFiles.length;
-
-  while (Date.now() - startAt < timeoutMs) {
-    const files = fs.readdirSync(MAIL_DIR).filter((f) => f.endsWith('.txt'));
-
-    // Check if new file appeared
-    if (files.length > startCount) {
-      const newestFile = files
-        .map((f) => ({ name: f, time: fs.statSync(path.join(MAIL_DIR, f)).mtimeMs }))
-        .sort((a, b) => b.time - a.time)[0];
-      if (!newestFile) return null;
-
-      const content = fs.readFileSync(path.join(MAIL_DIR, newestFile.name), 'utf-8');
-      return extractTokenFromEmail(content);
+function findRepoRoot(): string {
+  let dir = process.cwd();
+  for (let i = 0; i < 6; i++) {
+    if (
+      fs.existsSync(path.join(dir, 'package.json')) &&
+      fs.existsSync(path.join(dir, 'apps'))
+    ) {
+      return dir;
     }
-
-    // If waitForNewCount specified, wait for that count
-    if (options?.waitForNewCount && files.length >= options.waitForNewCount) {
-      const newestFile = files
-        .map((f) => ({ name: f, time: fs.statSync(path.join(MAIL_DIR, f)).mtimeMs }))
-        .sort((a, b) => b.time - a.time)[0];
-      if (!newestFile) return null;
-
-      const content = fs.readFileSync(path.join(MAIL_DIR, newestFile.name), 'utf-8');
-      const token = extractTokenFromEmail(content);
-      if (token) return token;
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    dir = path.resolve(dir, '..');
   }
-
-  return null;
+  return process.cwd();
 }
 
-/**
- * Read all magic link tokens from the mail directory.
- */
-export function getAllTokens(): string[] {
-  if (!fs.existsSync(MAIL_DIR)) return [];
+const REPO_ROOT = findRepoRoot();
+const MAIL_DIR = process.env.MAIL_FILE_DIR
+  ? path.resolve(process.env.MAIL_FILE_DIR)
+  : path.join(REPO_ROOT, '.data', 'mail');
 
-  const files = fs.readdirSync(MAIL_DIR).filter((f) => f.endsWith('.txt'));
-  return files
-    .map((f) => {
-      const content = fs.readFileSync(path.join(MAIL_DIR, f), 'utf-8');
-      return extractTokenFromEmail(content);
-    })
-    .filter((t): t is string => t !== null);
+function listMailFiles(): string[] {
+  if (!fs.existsSync(MAIL_DIR)) return [];
+  return fs.readdirSync(MAIL_DIR).filter((f) => f.endsWith('.txt'));
+}
+
+function newestMailContent(): string | null {
+  const files = listMailFiles();
+  if (files.length === 0) return null;
+  const newest = files
+    .map((f) => ({
+      name: f,
+      time: fs.statSync(path.join(MAIL_DIR, f)).mtimeMs,
+    }))
+    .sort((a, b) => b.time - a.time)[0];
+  if (!newest) return null;
+  return fs.readFileSync(path.join(MAIL_DIR, newest.name), 'utf-8');
 }
 
 function extractTokenFromEmail(content: string): string | null {
-  // Token URL format: /auth/email/confirm?token=<RAW_TOKEN>
   const match = content.match(/token=([^\s&"<>]+)/);
   if (!match || !match[1]) return null;
   return match[1];
 }
 
 /**
- * Clear all mail files.
+ * Wait for a magic-link token.
+ * Handles race where mail is written before the waiter starts
+ * (common after form submit -> check page -> then poll).
  */
+export async function getLatestMagicLinkToken(
+  options?: Partial<{ timeoutMs: number; sinceMs: number }>,
+): Promise<string | null> {
+  const timeoutMs = options?.timeoutMs ?? 15000;
+  const sinceMs = options?.sinceMs ?? Date.now() - 5000;
+  const startAt = Date.now();
+
+  if (!fs.existsSync(MAIL_DIR)) {
+    fs.mkdirSync(MAIL_DIR, { recursive: true });
+  }
+
+  while (Date.now() - startAt < timeoutMs) {
+    const files = listMailFiles();
+    if (files.length > 0) {
+      // Prefer files modified after sinceMs; else newest overall
+      const candidates = files
+        .map((f) => ({
+          name: f,
+          time: fs.statSync(path.join(MAIL_DIR, f)).mtimeMs,
+        }))
+        .filter((f) => f.time >= sinceMs)
+        .sort((a, b) => b.time - a.time);
+
+      const pick = candidates[0] ??
+        files
+          .map((f) => ({
+            name: f,
+            time: fs.statSync(path.join(MAIL_DIR, f)).mtimeMs,
+          }))
+          .sort((a, b) => b.time - a.time)[0];
+
+      if (pick) {
+        const content = fs.readFileSync(
+          path.join(MAIL_DIR, pick.name),
+          'utf-8',
+        );
+        const token = extractTokenFromEmail(content);
+        if (token) return token;
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 300));
+  }
+
+  // Last chance: newest file regardless of age
+  const content = newestMailContent();
+  return content ? extractTokenFromEmail(content) : null;
+}
+
+export function getAllTokens(): string[] {
+  return listMailFiles()
+    .map((f) =>
+      extractTokenFromEmail(
+        fs.readFileSync(path.join(MAIL_DIR, f), 'utf-8'),
+      ),
+    )
+    .filter((t): t is string => t !== null);
+}
+
 export function clearMailDir(): void {
-  if (!fs.existsSync(MAIL_DIR)) return;
-  const files = fs.readdirSync(MAIL_DIR).filter((f) => f.endsWith('.txt'));
-  for (const f of files) {
+  if (!fs.existsSync(MAIL_DIR)) {
+    fs.mkdirSync(MAIL_DIR, { recursive: true });
+    return;
+  }
+  for (const f of listMailFiles()) {
     fs.unlinkSync(path.join(MAIL_DIR, f));
   }
+}
+
+export function getMailDir(): string {
+  return MAIL_DIR;
 }

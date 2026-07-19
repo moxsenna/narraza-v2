@@ -73,26 +73,29 @@ async function applyDomainOperation(
   const payload = op.payload;
 
   if (targetType === 'foundation' && ports.foundationRepo) {
-    await ports.foundationRepo.upsert({
-      projectId,
-      premise:
-        typeof payload.premise === 'string' || payload.premise === null
-          ? (payload.premise as string | null)
-          : undefined,
-      tone:
-        typeof payload.tone === 'string' || payload.tone === null
-          ? (payload.tone as string | null)
-          : undefined,
-      genre:
-        typeof payload.genre === 'string' || payload.genre === null
-          ? (payload.genre as string | null)
-          : undefined,
-      body:
-        payload.body !== undefined &&
-        (payload.body === null || typeof payload.body === 'object')
-          ? (payload.body as Record<string, unknown> | null)
-          : undefined,
-    });
+    const upsert: {
+      projectId: string;
+      premise?: string | null;
+      tone?: string | null;
+      genre?: string | null;
+      body?: Record<string, unknown> | null;
+    } = { projectId };
+    if (typeof payload.premise === 'string' || payload.premise === null) {
+      upsert.premise = payload.premise as string | null;
+    }
+    if (typeof payload.tone === 'string' || payload.tone === null) {
+      upsert.tone = payload.tone as string | null;
+    }
+    if (typeof payload.genre === 'string' || payload.genre === null) {
+      upsert.genre = payload.genre as string | null;
+    }
+    if (
+      payload.body !== undefined &&
+      (payload.body === null || typeof payload.body === 'object')
+    ) {
+      upsert.body = payload.body as Record<string, unknown> | null;
+    }
+    await ports.foundationRepo.upsert(upsert);
     return;
   }
 
@@ -135,8 +138,13 @@ async function applyDomainOperation(
           ? payload.content
           : null;
     if (factKey && truth) {
-      await ports.factRepo.upsert({
-        id: op.targetId ?? undefined,
+      const factUpsert: {
+        id?: string;
+        projectId: string;
+        factKey: string;
+        truth: string;
+        canonStatus: 'confirmed' | 'deprecated' | 'contradicted';
+      } = {
         projectId,
         factKey,
         truth,
@@ -146,7 +154,9 @@ async function applyDomainOperation(
           payload.canonStatus === 'confirmed'
             ? payload.canonStatus
             : 'confirmed',
-      });
+      };
+      if (op.targetId) factUpsert.id = op.targetId;
+      await ports.factRepo.upsert(factUpsert);
     }
     return;
   }

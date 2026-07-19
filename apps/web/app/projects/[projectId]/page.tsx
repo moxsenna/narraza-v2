@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { getSessionUser } from '../../lib/get-session-user.js';
+import { getSessionUser } from '../../lib/get-session-user';
 import { lockOwnedProject, computeProjectProgress } from '@narraza/application';
 import { createProjectRepo } from '@narraza/db/repositories/project-repo.js';
 import { createFoundationRepo } from '@narraza/db/repositories/foundation-repo.js';

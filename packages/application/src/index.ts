@@ -49,6 +49,16 @@ export type {
   ProseVersionRepo,
 } from './ports/canonical-change-set-ports.js';
 
+// Outline / chapter ports
+export type {
+  ChapterOutline,
+  CreateChapterOutlineInput,
+  Chapter,
+  CreateChapterInput,
+  ChapterOutlineRepo,
+  ChapterRepo,
+} from './ports/outline-ports.js';
+
 // Unit of Work
 export type { TransactionPorts, UnitOfWork, OperationalUnitOfWork, UnitOfWorkOptions } from './unit-of-work.js';
 

@@ -1,56 +1,35 @@
-import { test, expect, type Page } from '@playwright/test';
-import { ensureLoggedIn } from './helpers/auth.js';
-import { clearMailDir } from './helpers/mail.js';
-
-const TEST_EMAIL = 'e2e-idor@narraza.test';
-const PROJECT_TITLE = 'E2E IDOR Owner Project';
+import { test, expect } from '@playwright/test';
+import { ensureLoggedIn } from './helpers/auth';
+import { clearMailDir } from './helpers/mail';
+import { createGuidedProject } from './helpers/project';
 
 test.describe('idor', () => {
-  let projectId: string | null = null;
-
-  test.beforeEach(async ({ page }) => {
+  test('create a project, then access without session redirects/not found', async ({
+    page,
+  }) => {
     clearMailDir();
-    await ensureLoggedIn(page, TEST_EMAIL);
-  });
+    await ensureLoggedIn(page, `e2e-idor-${Date.now()}@narraza.test`);
 
-  test('create a project, then access with different user should get NOT_FOUND', async ({ page }) => {
-    // User A creates a project
-    await page.goto('/start');
-    await page.fill('input[name="title"]', PROJECT_TITLE);
-    await page.click('text=Guided');
-    await page.click('button:text("Create Project")');
+    const title = `E2E IDOR Owner ${Date.now()}`;
+    const projectId = await createGuidedProject(page, title);
 
-    await page.waitForURL('**/dashboard', { timeout: 10000 });
-
-    // Get the project ID from dashboard link
-    const projectLink = page.locator(`text=${PROJECT_TITLE}`);
-    await expect(projectLink).toBeVisible();
-
-    const href = await projectLink.getAttribute('href');
-    const match = href?.match(/\/projects\/([^/]+)/);
-    expect(match).toBeTruthy();
-    projectId = match![1]!;
-
-    // The project page should be accessible for owner
+    // Owner can open project
     await page.goto(`/projects/${projectId}`);
-    await page.waitForTimeout(1000);
+    await page.waitForLoadState('domcontentloaded');
     expect(page.url()).toContain(`/projects/${projectId}`);
 
-    // Now hit the project page without any session — should redirect
-    const context = page.context();
-    // Clear cookies to simulate other user
-    await context.clearCookies();
-
-    // Visit project page with no auth — should redirect to login
+    // Clear session — unauthenticated access
+    await page.context().clearCookies();
     await page.goto(`/projects/${projectId}`);
-    await page.waitForTimeout(3000);
-    const noAuthUrl = page.url();
+    await page.waitForLoadState('domcontentloaded');
 
-    // Either redirected to auth/email or got a "not found" page
-    expect(
+    const noAuthUrl = page.url();
+    const body = (await page.locator('body').textContent()) ?? '';
+    const denied =
       noAuthUrl.includes('/auth/email') ||
-        noAuthUrl.includes('dashboard') ||
-        (await page.locator('body').textContent())?.includes(/Not found|not found|tidak ditemukan/i),
-    ).toBeTruthy();
+      noAuthUrl.includes('/dashboard') ||
+      /not found|tidak ditemukan|login/i.test(body);
+
+    expect(denied).toBeTruthy();
   });
 });

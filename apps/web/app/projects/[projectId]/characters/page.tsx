@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { getSessionUser } from '../../../lib/get-session-user.js';
+import { getSessionUser } from '../../../lib/get-session-user';
 import { lockOwnedProject, upsertCharacter } from '@narraza/application';
 import type { UpsertCharacterInput } from '@narraza/application';
 

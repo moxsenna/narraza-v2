@@ -17,6 +17,8 @@ export interface WorkflowStage {
   promptContractVersion: string;
   /** Maximum number of invocations for this stage */
   maxInvocations: number;
+  /** Optional stable key for multi-invocation stages */
+  invocationKey?: string;
 }
 
 export interface RoutingPlan {

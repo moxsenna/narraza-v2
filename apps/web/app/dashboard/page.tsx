@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { getSessionUser } from '../lib/get-session-user.js';
+import { getSessionUser } from '../lib/get-session-user';
 import { listProjects } from '@narraza/application';
 import { createProjectRepo } from '@narraza/db/repositories/project-repo.js';
 

@@ -61,9 +61,11 @@ export function verifyPendingCookie(cookieValue: string, authSecret: string): Pe
 }
 
 export function formatPendingCookie(cookieValue: string): string {
-  return `pending_login=${cookieValue}; Path=/auth/email; Max-Age=600; HttpOnly; SameSite=Lax`;
+  // Path=/ so POST /auth/email/confirm always receives cookie after prepare redirect.
+  // Token still never appears in cookie — only opaque challenge reference + nonce.
+  return `pending_login=${cookieValue}; Path=/; Max-Age=600; HttpOnly; SameSite=Lax`;
 }
 
 export function formatClearPendingCookie(): string {
-  return 'pending_login=; Path=/auth/email; Max-Age=0; HttpOnly; SameSite=Lax';
+  return 'pending_login=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax';
 }

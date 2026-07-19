@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { getSessionUser } from '../../../lib/get-session-user.js';
+import { getSessionUser } from '../../../lib/get-session-user';
 import { getCreditSummary } from '@narraza/application';
 import { createUserRepo } from '@narraza/db/repositories/user-repo.js';
 import { createLedgerRepo } from '@narraza/db/repositories/ledger-repo.js';

@@ -1,17 +1,9 @@
 import type { Page } from '@playwright/test';
-import { getLatestMagicLinkToken } from './mail.js';
+import { clearMailDir, getLatestMagicLinkToken } from './mail';
 
 /**
  * Complete a full magic-link login flow.
- *
- * 1. Navigate to /auth/email
- * 2. Enter email and submit
- * 3. Wait for magic link in .data/mail/
- * 4. Visit the confirm URL with token
- * 5. POST confirm (this happens automatically via the redirect flow)
- * 6. Return when redirected to /dashboard
- *
- * NO login bypass — uses real mail capture.
+ * NO login bypass — uses real mail capture + real prepare/consume endpoints.
  */
 export async function loginViaMagicLink(
   page: Page,
@@ -20,40 +12,62 @@ export async function loginViaMagicLink(
 ): Promise<void> {
   const timeoutMs = options?.timeoutMs ?? 30000;
 
-  // Step 1: Go to auth/email page
+  clearMailDir();
+  const sinceMs = Date.now() - 1000;
+
   await page.goto('/auth/email');
-
-  // Step 2: Fill email and submit
   await page.fill('input[name="email"]', email);
-  await page.click('button[type="submit"]');
+  await Promise.all([
+    page.waitForURL(/\/auth\/email\/check/, { timeout: 20000 }),
+    page.click('button[type="submit"]'),
+  ]);
 
-  // Step 3: Wait for mail to arrive
-  const token = await getLatestMagicLinkToken({ timeoutMs });
+  const token = await getLatestMagicLinkToken({ timeoutMs, sinceMs });
   if (!token) {
-    throw new Error(`No magic link token received for ${email} within ${timeoutMs}ms`);
+    throw new Error(
+      `No magic link token received for ${email} within ${timeoutMs}ms`,
+    );
   }
 
-  // Step 4: Visit confirm URL (GET does prepare, sets pending_login cookie, 303 to /auth/email/confirm)
-  await page.goto(`/auth/email/confirm?token=${token}`);
+  // prepare: set pending cookie, land on confirm page (GET only — no route conflict)
+  await page.goto(`/auth/email/prepare?token=${encodeURIComponent(token)}`);
+  await page.waitForURL(/\/auth\/email\/confirm/, { timeout: 15000 });
 
-  // Step 5: The confirm page POSTs to the route handler, which then redirects to /dashboard
-  // Wait for the page to settle on /dashboard
-  await page.waitForURL('**/dashboard', { timeout: 15000 });
+  const cookies = await page.context().cookies();
+  const pending = cookies.find((c) => c.name === 'pending_login');
+  if (!pending) {
+    throw new Error(
+      `pending_login cookie missing after prepare. cookies=${cookies
+        .map((c) => `${c.name}@${c.path}`)
+        .join(',')}`,
+    );
+  }
+
+  // POST consume via shared cookie jar (real endpoint)
+  const confirmRes = await page.request.post('/auth/email/consume', {
+    maxRedirects: 0,
+  });
+  const status = confirmRes.status();
+  const location = confirmRes.headers()['location'] ?? '';
+  if (status !== 303 && status !== 302 && status !== 307) {
+    const body = await confirmRes.text();
+    throw new Error(
+      `consume POST failed status=${status} body=${body.slice(0, 300)}`,
+    );
+  }
+
+  const dest = location.startsWith('http')
+    ? location
+    : new URL(location || '/dashboard', page.url()).toString();
+  await page.goto(dest);
+  await page.waitForURL(/\/dashboard/, { timeout: 15000 });
 }
 
-/**
- * Ensure a user is logged in for the given page.
- * If already on dashboard, return. Otherwise, perform login.
- */
 export async function ensureLoggedIn(page: Page, email: string): Promise<void> {
-  // Check if already logged in by visiting dashboard
   await page.goto('/dashboard');
-
-  // If we're on dashboard, we're logged in
-  if (page.url().includes('/dashboard')) {
+  await page.waitForLoadState('domcontentloaded').catch(() => {});
+  if (page.url().includes('/dashboard') && !page.url().includes('/auth')) {
     return;
   }
-
-  // Otherwise, perform full login
   await loginViaMagicLink(page, email);
 }

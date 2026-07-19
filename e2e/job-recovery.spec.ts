@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
-import { ensureLoggedIn } from './helpers/auth.js';
-import { clearMailDir } from './helpers/mail.js';
+import { ensureLoggedIn } from './helpers/auth';
+import { clearMailDir } from './helpers/mail';
 
 const TEST_EMAIL = 'e2e-jobrecovery@narraza.test';
 const PROJECT_TITLE = 'E2E Job Recovery Test';

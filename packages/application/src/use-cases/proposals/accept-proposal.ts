@@ -18,13 +18,6 @@
 import type { TransactionPorts } from '../../unit-of-work.js';
 import type { ProposalTxPorts } from '../../ports/proposal-ports.js';
 import type { UserRepo } from '../../ports/auth-ports.js';
-import type {
-  FactRepo,
-  BeatRepo,
-  ProseVersionRepo,
-} from '../../ports/canonical-change-set-ports.js';
-import type { FoundationRepo } from '../../ports/foundation-ports.js';
-import type { CharacterRepo } from '../../ports/character-ports.js';
 import { authorizeActiveUser } from '../../authz/authorize-active-user.js';
 import { lockOwnedProject } from '../../authz/lock-owned-project.js';
 import { evaluateStalePolicy } from '@narraza/core';
@@ -68,18 +61,11 @@ export interface AcceptProposalOutput {
 }
 
 /**
- * Full ports needed for acceptProposal — combines TransactionPorts with
- * proposal-specific ports and optional domain write ports.
+ * Full ports needed for acceptProposal — TransactionPorts already include
+ * domain write repos (foundation/character/fact/beat/prose/chapter).
  */
 export interface AcceptProposalPorts extends TransactionPorts, ProposalTxPorts {
   userRepo: UserRepo;
-  foundationRepo?: FoundationRepo;
-  characterRepo?: CharacterRepo;
-  factRepo?: FactRepo;
-  beatRepo?: BeatRepo;
-  proseVersionRepo?: ProseVersionRepo;
-  chapterOutlineRepo?: TransactionPorts['chapterOutlineRepo'];
-  chapterRepo?: TransactionPorts['chapterRepo'];
 }
 
 /**

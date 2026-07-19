@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
-import { loginViaMagicLink } from './helpers/auth.js';
-import { clearMailDir } from './helpers/mail.js';
+import { loginViaMagicLink } from './helpers/auth';
+import { clearMailDir } from './helpers/mail';
 
 const TEST_EMAIL = 'e2e-auth@narraza.test';
 

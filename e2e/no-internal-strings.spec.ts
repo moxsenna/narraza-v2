@@ -1,83 +1,51 @@
 import { test, expect } from '@playwright/test';
-import { ensureLoggedIn } from './helpers/auth.js';
-import { clearMailDir } from './helpers/mail.js';
+import { ensureLoggedIn } from './helpers/auth';
+import { clearMailDir } from './helpers/mail';
+import { createGuidedProject } from './helpers/project';
 
-const TEST_EMAIL = 'e2e-noleak@narraza.test';
+const FORBIDDEN = [
+  'service_restricted',
+  'internalRationale',
+  'CanonicalChangeOperation',
+  'restrictedGuardSet',
+];
 
 test.describe('no-internal-strings', () => {
-  test.beforeEach(async ({ page }) => {
+  test('no restricted internal strings in DOM', async ({ page }) => {
     clearMailDir();
-    await ensureLoggedIn(page, TEST_EMAIL);
-  });
+    await ensureLoggedIn(page, `e2e-noleak-${Date.now()}@narraza.test`);
 
-  test('no service_restricted or internalRationale in DOM on any project page', async ({ page }) => {
-    // Navigate to dashboard
-    await page.goto('/dashboard');
-    await page.waitForTimeout(1000);
+    const routes = ['/dashboard', '/start', '/auth/email'];
+    for (const route of routes) {
+      await page.goto(route);
+      await page.waitForLoadState('domcontentloaded');
+      const html = await page.content();
+      for (const s of FORBIDDEN) {
+        expect(html, `route ${route} leaked ${s}`).not.toContain(s);
+      }
+    }
 
-    const dashHtml = await page.content();
-    expect(dashHtml).not.toContain('service_restricted');
-    expect(dashHtml).not.toContain('internalRationale');
-    expect(dashHtml).not.toContain('CanonicalChangeOperation');
-    expect(dashHtml).not.toContain('restrictedGuardSet');
+    const title = `No Leak ${Date.now()}`;
+    const projectId = await createGuidedProject(page, title);
 
-    // Navigate to start page
-    await page.goto('/start');
-    await page.waitForTimeout(500);
-
-    const startHtml = await page.content();
-    expect(startHtml).not.toContain('service_restricted');
-    expect(startHtml).not.toContain('internalRationale');
-
-    // Visit auth page
-    await page.goto('/auth/email');
-    await page.waitForTimeout(500);
-
-    const authHtml = await page.content();
-    expect(authHtml).not.toContain('service_restricted');
-    expect(authHtml).not.toContain('internalRationale');
-    expect(authHtml).not.toContain('rawToken'); // raw token should never be in HTML
-
-    // Create a project and check project pages
-    await page.goto('/start');
-    await page.fill('input[name="title"]', 'No Leak Test');
-    await page.click('text=Guided');
-    await page.click('button:text("Create Project")');
-    await page.waitForURL('**/dashboard', { timeout: 10000 });
-
-    const projectLink = page.locator('text=No Leak Test');
-    await expect(projectLink).toBeVisible();
-    const href = await projectLink.getAttribute('href');
-    const match = href?.match(/\/projects\/([^/]+)/);
-    expect(match).toBeTruthy();
-    const projectId = match![1]!;
-
-    // Check project pages
     const pagesToCheck = [
       `/projects/${projectId}/intake`,
       `/projects/${projectId}/concepts`,
       `/projects/${projectId}/foundation`,
       `/projects/${projectId}/characters`,
       `/projects/${projectId}/settings`,
+      `/projects/${projectId}/proposals`,
     ];
 
     for (const route of pagesToCheck) {
       await page.goto(route);
-      await page.waitForTimeout(1000);
-
+      await page.waitForLoadState('domcontentloaded');
       const html = await page.content();
-      expect(html, `Route ${route} should not contain service_restricted`).not.toContain('service_restricted');
-      expect(html, `Route ${route} should not contain internalRationale`).not.toContain('internalRationale');
-      expect(html, `Route ${route} should not contain CanonicalChangeOperation`).not.toContain('CanonicalChangeOperation');
-      expect(html, `Route ${route} should not contain restrictedGuardSet`).not.toContain('restrictedGuardSet');
+      for (const s of FORBIDDEN) {
+        expect(html, `route ${route} leaked ${s}`).not.toContain(s);
+      }
+      // raw token should never appear in HTML
+      expect(html).not.toContain('rawToken');
     }
-
-    // Check proposals page
-    await page.goto(`/projects/${projectId}/proposals`);
-    await page.waitForTimeout(1000);
-    const proposalHtml = await page.content();
-    expect(proposalHtml).not.toContain('service_restricted');
-    expect(proposalHtml).not.toContain('internalRationale');
-    expect(proposalHtml).not.toContain('CanonicalChangeOperation');
   });
 });
