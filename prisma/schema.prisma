@@ -1,5 +1,6 @@
-// GenerationJob* tables land in M3.0
-// M0: identity, session, challenge, project shell only
+// M0: identity, session, challenge, project shell
+// M1.1a/b: canon entities, prose, proposals, validation artifacts
+// M3.0: jobs, credits, outbox, workflow
 
 generator client {
   provider = "prisma-client-js"
@@ -55,6 +56,72 @@ enum ProposalStatus {
   needs_revalidation
 }
 
+enum GenerationJobStatus {
+  queued
+  running
+  succeeded
+  failed
+  dead
+  cancelled
+}
+
+enum GenerationAttemptStatus {
+  started
+  completed
+  failed
+  unknown
+}
+
+enum CreditReservationStatus {
+  reserved
+  closing
+  closed
+}
+
+enum AttemptCostExposureStatus {
+  open
+  settled
+  released
+}
+
+enum CreditQuoteStatus {
+  issued
+  consumed
+  expired
+}
+
+enum OutboxEventStatus {
+  pending
+  processing
+  completed
+  dead
+}
+
+enum OutboxReceiptStatus {
+  processing
+  completed
+  uncertain
+  dead
+}
+
+enum WorkflowInvocationStatus {
+  pending
+  started
+  completed
+  failed
+  timed_out
+}
+
+enum AuditEventClass {
+  credit
+  job
+  proposal
+  canon
+  auth
+  outbox
+  system
+}
+
 model User {
   id            String     @id @default(cuid())
   email         String     @unique
@@ -69,6 +136,14 @@ model User {
   sessions   Session[]
   projects   Project[]
   challenges EmailLoginChallenge[]
+
+  creditLedgerEntries CreditLedger[]
+  generationJobs      GenerationJob[]
+  creditReservations  CreditReservation[]
+  creditQuotes        CreditQuote[]
+  concurrencySlots    UserConcurrencySlot[]
+  auditEvents         AuditEvent[]
+  workingDrafts       ProseWorkingDraft[]
 
   @@map("users")
 }
@@ -153,12 +228,16 @@ model Project {
   contextBundles    GenerationContextBundle[]
   publishArtifacts  PublishPackageArtifact[]
 
+  generationJobs GenerationJob[]
+  auditEvents    AuditEvent[]
+
   @@unique([ownerUserId, createRequestId])
   @@index([ownerUserId])
   @@map("projects")
 }
 
-/// Minimal ledger for signup grant in M0; full credit model expands in M3.0
+/// Append-only ledger for credit grants, settlements, refunds, adjustments.
+/// Expanded from M0 minimal model; dedupe_key unique index already exists.
 model CreditLedger {
   id          String   @id @default(cuid())
   userId      String   @map("user_id")
@@ -166,6 +245,8 @@ model CreditLedger {
   amountMicro BigInt   @map("amount_micro")
   dedupeKey   String   @unique @map("dedupe_key")
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@map("credit_ledger")
@@ -346,6 +427,8 @@ model Beat {
   contextSnapshots ContextSnapshot[]
   contextBundles   GenerationContextBundle[]
 
+  workingDrafts ProseWorkingDraft[]
+
   @@unique([chapterId, beatNumber])
   @@index([chapterId])
   @@map("beats")
@@ -427,8 +510,9 @@ model GeneratedCandidate {
   proseVersionId      String?  @map("prose_version_id")
   createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  proseVersion       ProseVersion?      @relation(fields: [proseVersionId], references: [id], onDelete: SetNull)
-  validationReports  ValidationReport[]
+  generationAttempt GenerationAttempt? @relation(fields: [generationAttemptId], references: [id], onDelete: SetNull)
+  proseVersion      ProseVersion?      @relation(fields: [proseVersionId], references: [id], onDelete: SetNull)
+  validationReports ValidationReport[]
 
   @@index([generationAttemptId])
   @@map("generated_candidates")
@@ -554,6 +638,8 @@ model GenerationContextBundle {
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   beat    Beat?   @relation(fields: [beatId], references: [id], onDelete: SetNull)
 
+  generationJobs GenerationJob[]
+
   @@index([projectId])
   @@index([beatId])
   @@map("generation_context_bundles")
@@ -574,4 +660,274 @@ model PublishPackageArtifact {
   @@index([projectId])
   @@index([changeSetId])
   @@map("publish_package_artifacts")
+}
+
+// =============================================================================
+// M3.0: Jobs, credits, outbox, workflow, audit, prose working draft
+// =============================================================================
+
+model GenerationJob {
+  id                  String              @id @default(cuid())
+  ownerUserId         String              @map("owner_user_id")
+  projectId           String              @map("project_id")
+  status              GenerationJobStatus @default(queued)
+  jobType             String              @map("job_type")
+  payloadJson         Json                @map("payload_json")
+  runAfter            DateTime            @default(now()) @map("run_after") @db.Timestamptz(3)
+  priority            Int                 @default(0)
+  leaseToken          String?             @map("lease_token")
+  leaseVersion        Int                 @default(0) @map("lease_version")
+  leaseExpiresAt      DateTime?           @map("lease_expires_at") @db.Timestamptz(3)
+  leaseOwner          String?             @map("lease_owner")
+  cancelRequestedAt   DateTime?           @map("cancel_requested_at") @db.Timestamptz(3)
+  executionRetryCount Int                 @default(0) @map("execution_retry_count")
+  maxExecutionRetries Int                 @default(3) @map("max_execution_retries")
+  terminalAt          DateTime?           @map("terminal_at") @db.Timestamptz(3)
+  terminalReasonCode  String?             @map("terminal_reason_code")
+  conflictKey         String?             @map("conflict_key")
+  requestId           String              @unique @map("request_id")
+  workflowPlanId      String?             @map("workflow_plan_id")
+  contextBundleId     String?             @map("context_bundle_id")
+  reservationId       String?             @map("reservation_id")
+  retryOfJobId        String?             @map("retry_of_job_id")
+  nextAttemptNumber   Int                 @default(1) @map("next_attempt_number")
+  createdAt           DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  owner               User                        @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  project             Project                     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  contextBundle       GenerationContextBundle?    @relation(fields: [contextBundleId], references: [id], onDelete: SetNull)
+  retryOf             GenerationJob?              @relation("JobRetry", fields: [retryOfJobId], references: [id], onDelete: SetNull)
+  retriedBy           GenerationJob[]             @relation("JobRetry")
+  attempts            GenerationAttempt[]
+  workflowInvocations WorkflowInvocation[]
+  reservations        CreditReservation[]
+  creditQuotes        CreditQuote[]
+  concurrencySlots    UserConcurrencySlot[]
+
+  @@index([ownerUserId])
+  @@index([projectId])
+  @@map("generation_jobs")
+}
+
+model GenerationAttempt {
+  id                   String                  @id @default(cuid())
+  generationJobId      String                  @map("generation_job_id")
+  workflowInvocationId String?                 @map("workflow_invocation_id")
+  status               GenerationAttemptStatus @default(started)
+  attemptNumber        Int                     @map("attempt_number")
+  leaseToken           String?                 @map("lease_token")
+  deadlineAt           DateTime?               @map("deadline_at") @db.Timestamptz(3)
+  retryDisposition     String?                 @map("retry_disposition")
+  providerRequestId    String?                 @map("provider_request_id")
+  createdAt            DateTime                @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime                @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  generationJob      GenerationJob        @relation(fields: [generationJobId], references: [id], onDelete: Cascade)
+  workflowInvocation WorkflowInvocation?  @relation(fields: [workflowInvocationId], references: [id], onDelete: SetNull)
+  costExposures      AttemptCostExposure[]
+  usageEvents        AIUsageEvent[]
+  candidates         GeneratedCandidate[]
+
+  @@index([generationJobId])
+  @@index([workflowInvocationId])
+  @@map("generation_attempts")
+}
+
+model WorkflowInvocation {
+  id                String                     @id @default(cuid())
+  generationJobId   String                     @map("generation_job_id")
+  routingStage      String                     @map("routing_stage")
+  invocationKey     String                     @map("invocation_key")
+  selectedAttemptId String?                    @map("selected_attempt_id")
+  status            WorkflowInvocationStatus   @default(pending)
+  createdAt         DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  generationJob GenerationJob      @relation(fields: [generationJobId], references: [id], onDelete: Cascade)
+  attempts      GenerationAttempt[]
+
+  @@index([generationJobId])
+  @@map("workflow_invocations")
+}
+
+model CreditReservation {
+  id              String                   @id @default(cuid())
+  jobId           String                   @map("job_id")
+  userId          String                   @map("user_id")
+  reservedAmount  BigInt                   @map("reserved_amount")
+  settledAmount   BigInt                   @default(0) @map("settled_amount")
+  releasedAmount  BigInt                   @default(0) @map("released_amount")
+  status          CreditReservationStatus  @default(reserved)
+  createdAt       DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  job          GenerationJob           @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  user         User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  costExposures AttemptCostExposure[]
+
+  @@index([jobId])
+  @@index([userId])
+  @@map("credit_reservations")
+}
+
+model AttemptCostExposure {
+  id                    String                      @id @default(cuid())
+  generationAttemptId   String                      @map("generation_attempt_id")
+  reservationId         String                      @map("reservation_id")
+  estimatedAmountMicro  BigInt                      @map("estimated_amount_micro")
+  actualAmountMicro     BigInt?                     @map("actual_amount_micro")
+  status                AttemptCostExposureStatus   @default(open)
+  createdAt             DateTime                    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime                    @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  generationAttempt GenerationAttempt  @relation(fields: [generationAttemptId], references: [id], onDelete: Cascade)
+  reservation       CreditReservation  @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+
+  @@index([generationAttemptId])
+  @@index([reservationId])
+  @@map("attempt_cost_exposures")
+}
+
+model CreditQuote {
+  id                       String            @id @default(cuid())
+  ownerUserId              String            @map("owner_user_id")
+  workflowPlanHash         String            @map("workflow_plan_hash")
+  dependencyHash           String            @map("dependency_hash")
+  estimatedMaximumMicroIdr BigInt            @map("estimated_maximum_micro_idr")
+  expiresAt                DateTime          @map("expires_at") @db.Timestamptz(3)
+  consumedByJobId          String?           @unique @map("consumed_by_job_id")
+  status                   CreditQuoteStatus @default(issued)
+  createdAt                DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  owner      User           @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  consumedBy GenerationJob? @relation(fields: [consumedByJobId], references: [id], onDelete: SetNull)
+
+  @@index([ownerUserId])
+  @@map("credit_quotes")
+}
+
+model UserConcurrencySlot {
+  id         String    @id @default(cuid())
+  userId     String    @map("user_id")
+  jobId      String    @map("job_id")
+  slotKey    String    @map("slot_key")
+  acquiredAt DateTime  @default(now()) @map("acquired_at") @db.Timestamptz(3)
+  releasedAt DateTime? @map("released_at") @db.Timestamptz(3)
+
+  user User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job  GenerationJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("user_concurrency_slots")
+}
+
+model AIUsageEvent {
+  id                  String   @id @default(cuid())
+  generationAttemptId String   @map("generation_attempt_id")
+  modelId             String   @map("model_id")
+  provider            String
+  inputTokens         Int?     @map("input_tokens")
+  outputTokens        Int?     @map("output_tokens")
+  costMicroIdr        BigInt?  @map("cost_micro_idr")
+  providerReportedCost Json?   @map("provider_reported_cost")
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  generationAttempt GenerationAttempt @relation(fields: [generationAttemptId], references: [id], onDelete: Cascade)
+
+  @@map("ai_usage_events")
+}
+
+model OutboxEvent {
+  id                 String             @id @default(cuid())
+  dedupeKey          String             @map("dedupe_key")
+  status             OutboxEventStatus  @default(pending)
+  payload            Json
+  availableAt        DateTime           @default(now()) @map("available_at") @db.Timestamptz(3)
+  deliveryGeneration Int                @default(0) @map("delivery_generation")
+  createdAt          DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  receipts OutboxConsumerReceipt[]
+
+  @@map("outbox_events")
+}
+
+model OutboxConsumerReceipt {
+  id                String               @id @default(cuid())
+  consumerName      String               @map("consumer_name")
+  eventId           String               @map("event_id")
+  deliveryGeneration Int                 @map("delivery_generation")
+  status            OutboxReceiptStatus  @default(processing)
+  createdAt         DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  event OutboxEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@map("outbox_consumer_receipts")
+}
+
+model AuditEvent {
+  id              String         @id @default(cuid())
+  eventClass      AuditEventClass @map("event_class")
+  actorUserId     String?        @map("actor_user_id")
+  tenantProjectId String?        @map("tenant_project_id")
+  payload         Json
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  actor  User?    @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  tenant Project? @relation(fields: [tenantProjectId], references: [id], onDelete: SetNull)
+
+  @@index([actorUserId])
+  @@index([tenantProjectId])
+  @@index([createdAt])
+  @@map("audit_events")
+}
+
+model WorkerInstance {
+  id              String   @id @default(cuid())
+  instanceId      String   @unique @map("instance_id")
+  role            String
+  lastHeartbeatAt DateTime @map("last_heartbeat_at") @db.Timestamptz(3)
+  draining        Boolean  @default(false)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([lastHeartbeatAt])
+  @@map("worker_instances")
+}
+
+model ModelPriceSnapshot {
+  id                  String    @id @default(cuid())
+  modelId             String    @map("model_id")
+  provider            String
+  inputPriceMicroIdr  BigInt    @map("input_price_micro_idr")
+  outputPriceMicroIdr BigInt    @map("output_price_micro_idr")
+  effectiveAt         DateTime  @map("effective_at") @db.Timestamptz(3)
+  deprecatedAt        DateTime? @map("deprecated_at") @db.Timestamptz(3)
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([modelId, provider, effectiveAt])
+  @@map("model_price_snapshots")
+}
+
+model ProseWorkingDraft {
+  id          String    @id @default(cuid())
+  userId      String    @map("user_id")
+  beatId      String    @map("beat_id")
+  content     String    @db.Text
+  contentHash String    @map("content_hash")
+  version     Int       @default(1)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(3)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  beat Beat @relation(fields: [beatId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([beatId])
+  @@map("prose_working_drafts")
 }
