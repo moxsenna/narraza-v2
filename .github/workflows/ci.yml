@@ -51,7 +51,13 @@ jobs:
       - run: npm ci
       - run: npx prisma generate --schema prisma/schema.prisma
       # Build packages so workspace dist exports exist for typecheck consumers
-      - run: npm run build -w @narraza/shared -w @narraza/core -w @narraza/ai -w @narraza/db -w @narraza/application
+      - name: Build workspace packages
+        run: |
+          npx tsc -p packages/shared/tsconfig.json
+          npx tsc -p packages/core/tsconfig.json
+          npx tsc -p packages/ai/tsconfig.json
+          npx tsc -p packages/application/tsconfig.json
+          npx tsc -p packages/db/tsconfig.json
       - run: npm run lint
       - run: npm run typecheck
 
@@ -69,7 +75,13 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx prisma generate --schema prisma/schema.prisma
-      - run: npm run build -w @narraza/shared -w @narraza/core -w @narraza/ai -w @narraza/db -w @narraza/application
+      - name: Build workspace packages
+        run: |
+          npx tsc -p packages/shared/tsconfig.json
+          npx tsc -p packages/core/tsconfig.json
+          npx tsc -p packages/ai/tsconfig.json
+          npx tsc -p packages/application/tsconfig.json
+          npx tsc -p packages/db/tsconfig.json
       # Project names match package.json "name" fields
       - run: npx vitest run --project @narraza/core --project @narraza/shared --project @narraza/ai --project @narraza/application --project @narraza/db
 
@@ -102,7 +114,13 @@ jobs:
       - run: npm ci
       - run: npx prisma generate --schema prisma/schema.prisma
       - run: npx prisma migrate deploy --schema prisma/schema.prisma
-      - run: npm run build -w @narraza/shared -w @narraza/core -w @narraza/ai -w @narraza/db -w @narraza/application
+      - name: Build workspace packages
+        run: |
+          npx tsc -p packages/shared/tsconfig.json
+          npx tsc -p packages/core/tsconfig.json
+          npx tsc -p packages/ai/tsconfig.json
+          npx tsc -p packages/application/tsconfig.json
+          npx tsc -p packages/db/tsconfig.json
       - run: npx vitest run --project @narraza/application --project @narraza/db
 
   # ─────────────────────────────────────────────────────────────
@@ -181,7 +199,13 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx prisma generate --schema prisma/schema.prisma
-      - run: npm run build -w @narraza/shared -w @narraza/core -w @narraza/ai -w @narraza/db -w @narraza/application
+      - name: Build workspace packages
+        run: |
+          npx tsc -p packages/shared/tsconfig.json
+          npx tsc -p packages/core/tsconfig.json
+          npx tsc -p packages/ai/tsconfig.json
+          npx tsc -p packages/application/tsconfig.json
+          npx tsc -p packages/db/tsconfig.json
 
       # Grep for potential secrets in committed files (exclude lock/tsbuildinfo etc)
       - name: Scan for secrets in source
@@ -223,7 +247,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx prisma generate --schema prisma/schema.prisma
-      - run: npm run build -w @narraza/shared
+      - run: npx tsc -p packages/shared/tsconfig.json
       # Run shared env tests as contract sanity
       - run: npx vitest run --project @narraza/shared
 
@@ -256,7 +280,13 @@ jobs:
       - run: npm ci
       - run: npx prisma generate --schema prisma/schema.prisma
       - run: npx prisma migrate deploy --schema prisma/schema.prisma
-      - run: npm run build -w @narraza/shared -w @narraza/core -w @narraza/ai -w @narraza/db -w @narraza/application
+      - name: Build workspace packages
+        run: |
+          npx tsc -p packages/shared/tsconfig.json
+          npx tsc -p packages/core/tsconfig.json
+          npx tsc -p packages/ai/tsconfig.json
+          npx tsc -p packages/application/tsconfig.json
+          npx tsc -p packages/db/tsconfig.json
       - name: Install Playwright browsers
         run: npx playwright install chromium --with-deps
       - name: Run E2E tests
