@@ -3,10 +3,39 @@
  *
  * PM2 ecosystem configuration for Narraza v2.
  *
- * Each process gets only the secrets it needs (least-privilege):
- *  - web:     AUTH + DB_WEB + email
- *  - gen:     DB_WORKER + AI keys
- *  - outbox:  DB_OUTBOX only
+ * LEAST-PRIVILEGE SECRETS MODEL (design S6.3, M8.4):
+ *
+ * Each process gets ONLY the secrets it needs — no process receives
+ * the full secret set. If a process is compromised, the blast radius
+ * is limited to its own scope.
+ *
+ *   Process               | Secrets Provided
+ *   ----------------------+--------------------------------------------------
+ *   narraza-web           | AUTH_SECRET, DATABASE_URL_WEB, EMAIL_FROM,
+ *                          | EMAIL_CHALLENGE_PEPPER, RATE_LIMIT_PEPPER,
+ *                          | SIGNUP_GRANT_MICRO_IDR, MAIL_TRANSPORT,
+ *                          | MAIL_FILE_DIR
+ *                          | NO: DATABASE_URL_WORKER, DATABASE_URL_OUTBOX,
+ *                          |      OPENROUTER_API_KEY, GEMINI_API_KEY
+ *   ----------------------+--------------------------------------------------
+ *   narraza-worker-gen    | DATABASE_URL_WORKER, OPENROUTER_API_KEY,
+ *                          | GEMINI_API_KEY, ARTIFACT_STORAGE_PATH,
+ *                          | AI_ENABLE_MOCK
+ *                          | NO: DATABASE_URL_WEB, DATABASE_URL_OUTBOX,
+ *                          |      AUTH_SECRET, email secrets, peppers
+ *   ----------------------+--------------------------------------------------
+ *   narraza-worker-outbox | DATABASE_URL_OUTBOX only
+ *                          | NO: DATABASE_URL_WEB, DATABASE_URL_WORKER,
+ *                          |      AUTH_SECRET, AI keys, email secrets,
+ *                          |      peppers, signup grant
+ *
+ * VERIFICATION:
+ *   - No shared full secrets across processes
+ *   - Web cannot read AI keys
+ *   - Gen worker cannot read auth secrets
+ *   - Outbox worker cannot read anything except its DB URL
+ *
+ * See deploy/SECRETS.md for the full required-environment-variable listing.
  *
  * Usage:
  *   pm2 start deploy/ecosystem.config.cjs
