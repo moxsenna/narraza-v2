@@ -14,6 +14,16 @@ async function editFoundationAction(formData: FormData): Promise<void> {
   const genre = (formData.get('genre') as string)?.trim() || null;
   const targetAudience = (formData.get('targetAudience') as string)?.trim() || null;
   const pov = (formData.get('pov') as string)?.trim() || null;
+  const emotionalPromise = (formData.get('emotionalPromise') as string)?.trim() || null;
+  const protagonist = (formData.get('protagonist') as string)?.trim() || null;
+  const mainConflict = (formData.get('mainConflict') as string)?.trim() || null;
+  const canonFactsRaw = (formData.get('canonFacts') as string)?.trim() || '';
+  const targetChapterCountRaw = (formData.get('targetChapterCount') as string)?.trim() || '';
+  const endingDirection = (formData.get('endingDirection') as string)?.trim() || null;
+  const hasTwist = formData.get('hasTwist') === 'true' || formData.get('hasTwist') === 'on';
+  const primarySecret = (formData.get('primarySecret') as string)?.trim() || null;
+  const secretRevealChapterRaw = (formData.get('secretRevealChapter') as string)?.trim() || '';
+  const characterNamingRules = (formData.get('characterNamingRules') as string)?.trim() || null;
 
   const { lockOwnedProject, editFoundation } = await import('@narraza/application');
   const { createProjectRepo, createUserRepo, createFoundationRepo, createChangeSetRepo } = await import('../../../lib/server/db');
@@ -28,6 +38,21 @@ async function editFoundationAction(formData: FormData): Promise<void> {
   const body: Record<string, unknown> = {};
   if (targetAudience) body['targetAudience'] = targetAudience;
   if (pov) body['pov'] = pov;
+  if (emotionalPromise) body['emotionalPromise'] = emotionalPromise;
+  if (protagonist) body['protagonist'] = protagonist;
+  if (mainConflict) body['mainConflict'] = mainConflict;
+  if (canonFactsRaw) {
+    body['canonFacts'] = canonFactsRaw
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
+  if (targetChapterCountRaw) body['targetChapterCount'] = Number(targetChapterCountRaw);
+  if (endingDirection) body['endingDirection'] = endingDirection;
+  body['hasTwist'] = hasTwist;
+  if (primarySecret) body['primarySecret'] = primarySecret;
+  if (secretRevealChapterRaw) body['secretRevealChapter'] = Number(secretRevealChapterRaw);
+  if (characterNamingRules) body['characterNamingRules'] = characterNamingRules;
 
   try {
     await editFoundation(
@@ -118,9 +143,23 @@ export default async function FoundationPage({
   const premise = foundation?.premise ?? '';
   const tone = foundation?.tone ?? '';
   const genre = foundation?.genre ?? '';
-  const body = (foundation?.body ?? {}) as Record<string, string>;
-  const targetAudience = body['targetAudience'] ?? '';
-  const pov = body['pov'] ?? '';
+  const body = (foundation?.body ?? {}) as Record<string, unknown>;
+  const targetAudience = String(body['targetAudience'] ?? '');
+  const pov = String(body['pov'] ?? '');
+  const emotionalPromise = String(body['emotionalPromise'] ?? '');
+  const protagonist = String(body['protagonist'] ?? '');
+  const mainConflict = String(body['mainConflict'] ?? '');
+  const canonFacts = Array.isArray(body['canonFacts'])
+    ? (body['canonFacts'] as string[]).join('\n')
+    : String(body['canonFacts'] ?? '');
+  const targetChapterCount =
+    body['targetChapterCount'] != null ? String(body['targetChapterCount']) : '';
+  const endingDirection = String(body['endingDirection'] ?? '');
+  const hasTwist = body['hasTwist'] === true || body['hasTwist'] === 'true';
+  const primarySecret = String(body['primarySecret'] ?? '');
+  const secretRevealChapter =
+    body['secretRevealChapter'] != null ? String(body['secretRevealChapter']) : '';
+  const characterNamingRules = String(body['characterNamingRules'] ?? '');
 
   return (
     <div style={{ maxWidth: 720, margin: '0 auto' }}>
@@ -225,6 +264,138 @@ export default async function FoundationPage({
               style={inputStyle}
             />
           </div>
+        </div>
+
+        <div style={{ marginBottom: 12 }}>
+          <label style={labelStyle}>
+            Janji Emosional <span style={{ color: '#ef4444' }}>*</span>
+          </label>
+          <input
+            name="emotionalPromise"
+            defaultValue={emotionalPromise}
+            disabled={isLocked}
+            placeholder="Harapan setelah pengorbanan..."
+            style={inputStyle}
+          />
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+          <div>
+            <label style={labelStyle}>
+              Tokoh Utama <span style={{ color: '#ef4444' }}>*</span>
+            </label>
+            <input
+              name="protagonist"
+              defaultValue={protagonist}
+              disabled={isLocked}
+              placeholder="Nama / identitas singkat"
+              style={inputStyle}
+            />
+          </div>
+          <div>
+            <label style={labelStyle}>
+              Konflik Utama <span style={{ color: '#ef4444' }}>*</span>
+            </label>
+            <input
+              name="mainConflict"
+              defaultValue={mainConflict}
+              disabled={isLocked}
+              placeholder="Apa yang dipertaruhkan"
+              style={inputStyle}
+            />
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 12 }}>
+          <label style={labelStyle}>
+            Fakta Canon (min. 3 baris) <span style={{ color: '#ef4444' }}>*</span>
+          </label>
+          <textarea
+            name="canonFacts"
+            rows={3}
+            defaultValue={canonFacts}
+            disabled={isLocked}
+            placeholder={'Satu fakta per baris\nContoh: Kota punya pelabuhan\nProtagonis yatim'}
+            style={inputStyle}
+          />
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+          <div>
+            <label style={labelStyle}>
+              Target Jumlah Bab <span style={{ color: '#ef4444' }}>*</span>
+            </label>
+            <input
+              name="targetChapterCount"
+              type="number"
+              min={1}
+              defaultValue={targetChapterCount}
+              disabled={isLocked}
+              placeholder="30"
+              style={inputStyle}
+            />
+          </div>
+          <div>
+            <label style={labelStyle}>
+              Arah Ending <span style={{ color: '#ef4444' }}>*</span>
+            </label>
+            <input
+              name="endingDirection"
+              defaultValue={endingDirection}
+              disabled={isLocked}
+              placeholder="Bittersweet victory..."
+              style={inputStyle}
+            />
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ ...labelStyle, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input
+              type="checkbox"
+              name="hasTwist"
+              value="true"
+              defaultChecked={hasTwist}
+              disabled={isLocked}
+            />
+            Ada twist / rahasia utama
+          </label>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+          <div>
+            <label style={labelStyle}>Rahasia Utama</label>
+            <input
+              name="primarySecret"
+              defaultValue={primarySecret}
+              disabled={isLocked}
+              placeholder="Jika ada twist"
+              style={inputStyle}
+            />
+          </div>
+          <div>
+            <label style={labelStyle}>Bab Reveal Rahasia</label>
+            <input
+              name="secretRevealChapter"
+              type="number"
+              min={1}
+              defaultValue={secretRevealChapter}
+              disabled={isLocked}
+              placeholder="25"
+              style={inputStyle}
+            />
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 12 }}>
+          <label style={labelStyle}>Aturan Panggilan Karakter</label>
+          <input
+            name="characterNamingRules"
+            defaultValue={characterNamingRules}
+            disabled={isLocked}
+            placeholder="Gelar hanya untuk bangsawan..."
+            style={inputStyle}
+          />
         </div>
 
         <button

@@ -66,8 +66,16 @@ export async function lockFoundation(
   // 4. Load foundation for readiness check
   const foundation = await ports.foundationRepo.findByProjectId(input.projectId);
 
-  // 5. Check readiness
+  // 5. Check readiness (expanded P1 checklist)
   const body = (foundation?.body ?? {}) as Record<string, unknown>;
+  const canonFacts = Array.isArray(body['canonFacts'])
+    ? (body['canonFacts'] as unknown[]).map(String)
+    : typeof body['canonFacts'] === 'string'
+      ? String(body['canonFacts'])
+          .split('\n')
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : [];
   const readiness = checkFoundationReadiness({
     premise: foundation?.premise ?? '',
     title: project.title,
@@ -75,12 +83,33 @@ export async function lockFoundation(
     targetAudience: (body['targetAudience'] as string) ?? '',
     pov: (body['pov'] as string) ?? '',
     tone: foundation?.tone ?? '',
+    emotionalPromise: (body['emotionalPromise'] as string) ?? '',
+    protagonist: (body['protagonist'] as string) ?? '',
+    mainConflict: (body['mainConflict'] as string) ?? '',
+    canonFacts,
+    targetChapterCount:
+      typeof body['targetChapterCount'] === 'number'
+        ? body['targetChapterCount']
+        : body['targetChapterCount']
+          ? Number(body['targetChapterCount'])
+          : undefined,
+    endingDirection: (body['endingDirection'] as string) ?? '',
+    hasTwist: body['hasTwist'] === true || body['hasTwist'] === 'true',
+    primarySecret: (body['primarySecret'] as string) ?? '',
+    secretRevealChapter:
+      typeof body['secretRevealChapter'] === 'number'
+        ? body['secretRevealChapter']
+        : body['secretRevealChapter']
+          ? Number(body['secretRevealChapter'])
+          : undefined,
+    characterNamingRules: (body['characterNamingRules'] as string) ?? '',
   });
 
-  if (!readiness.ready) {
+  // Lock only when status is fully ready (not risky / not_ready)
+  if (readiness.status !== 'ready') {
     throw new PublicUseCaseError(
       'VALIDATION',
-      `Foundation is not ready to lock: ${readiness.reasons.join('; ')}`,
+      `Foundation is not ready to lock [${readiness.status} score=${readiness.score}]: ${[...readiness.blocking, ...readiness.warnings].join('; ')}`,
     );
   }
 

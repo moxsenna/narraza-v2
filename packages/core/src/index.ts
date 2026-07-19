@@ -24,6 +24,37 @@ export {
 export { mergeFindings } from './validator/merge-findings.js';
 export type { MergeFindingsInput, MergeFindingsResult } from './validator/merge-findings.js';
 export { structuralValidate, type StructuralValidationInput } from './validator/structural.js';
+export {
+  validateBeatContract,
+  type BeatContract,
+  type BeatContractValidationInput,
+} from './validator/beat-contract.js';
+export {
+  validateRevealLeak,
+  type RevealValidationInput,
+} from './validator/reveal-validator.js';
+export {
+  validateCharacterKnowledge,
+  type CharacterKnowledgeFact,
+  type CharacterKnowledgeValidationInput,
+} from './validator/character-knowledge.js';
+export {
+  validateCanonContradiction,
+  type CanonContradictionInput,
+  type CanonProposal,
+  type CanonSensitiveCategory,
+} from './validator/canon-contradiction.js';
+export {
+  validateSafeRepair,
+  applyMinimalSafeRepair,
+  type SafeRepairConstraints,
+  type SafeRepairValidationInput,
+} from './validator/safe-repair.js';
+export {
+  validateProseDeterministic,
+  type FullProseValidationInput,
+  type FullProseValidationResult,
+} from './validator/run-all.js';
 
 // Context packets
 export type { PlannerPacket } from './context/planner-packet.js';

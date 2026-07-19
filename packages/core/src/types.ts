@@ -196,6 +196,8 @@ export interface ProseVersionMetadata {
 
 // -- Readiness policy ------------------------------------------------------
 
+export type ReadinessStatus = 'not_ready' | 'risky' | 'ready';
+
 export interface FoundationReadinessInput {
   premise: string;
   title: string;
@@ -203,10 +205,37 @@ export interface FoundationReadinessInput {
   targetAudience: string;
   pov: string;
   tone: string;
+  /** Emotional promise to the reader */
+  emotionalPromise?: string | undefined;
+  /** Primary protagonist name / one-line identity */
+  protagonist?: string | undefined;
+  /** Central conflict statement */
+  mainConflict?: string | undefined;
+  /** Minimum canon facts (≥3 required) */
+  canonFacts?: string[] | undefined;
+  /** Planned chapter count */
+  targetChapterCount?: number | undefined;
+  /** Ending direction / tone of resolution */
+  endingDirection?: string | undefined;
+  /** Whether the story has a major twist / secret */
+  hasTwist?: boolean | undefined;
+  /** Primary secret / hidden truth (required when hasTwist) */
+  primarySecret?: string | undefined;
+  /** Chapter where primary secret is revealed */
+  secretRevealChapter?: number | undefined;
+  /** Character naming / address rules */
+  characterNamingRules?: string | undefined;
 }
 
 export interface ReadinessCheckResult {
+  /** True only when status === 'ready' (backward compatible) */
   ready: boolean;
+  status: ReadinessStatus;
+  score: number;
+  blocking: string[];
+  warnings: string[];
+  recommendations: string[];
+  /** Combined human-readable reasons (blocking + warnings) */
   reasons: string[];
 }
 

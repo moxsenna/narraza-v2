@@ -182,14 +182,27 @@ describe('lockFoundation', () => {
     const user = await createTestUser(`lock1-${Date.now()}`);
     const project = await createTestProject(user.id);
 
-    // Set up foundation with required fields
+    // Set up foundation with full P1 readiness checklist
     await prisma.foundation.create({
       data: {
         projectId: project.id,
         premise: 'A gripping tale of survival',
         tone: 'serious',
         genre: 'thriller',
-        body: { targetAudience: 'adults', pov: 'third_person' },
+        body: {
+          targetAudience: 'adults',
+          pov: 'third_person',
+          emotionalPromise: 'catharsis after chase',
+          protagonist: 'Maya',
+          mainConflict: 'Cartel vs whistleblower',
+          canonFacts: ['Harbor city', 'Maya is journalist', 'Cartel owns police'],
+          targetChapterCount: 24,
+          endingDirection: 'justice with cost',
+          hasTwist: true,
+          primarySecret: 'Editor is cartel mole',
+          secretRevealChapter: 18,
+          characterNamingRules: 'Use last names in formal scenes',
+        },
       },
     });
     await prisma.project.update({

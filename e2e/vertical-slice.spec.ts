@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { loginViaMagicLink } from './helpers/auth';
 import { clearMailDir } from './helpers/mail';
 import { createGuidedProject } from './helpers/project';
+import { fillAndLockFoundation } from './helpers/foundation';
 
 /**
  * Guided vertical slice as far as UI + mock AI wiring allow.
@@ -25,32 +26,13 @@ test.describe('vertical-slice', () => {
     const intakeBody = (await page.locator('body').textContent()) ?? '';
     expect(intakeBody).toMatch(/Intake|Ekstraksi|ide|cerita/i);
 
-    // Foundation edit + lock
-    await page.goto(`/projects/${projectId}/foundation`);
-    await page.waitForLoadState('domcontentloaded');
-    const premise = page.locator('textarea[name="premise"]');
-    if (await premise.isVisible()) {
-      const disabled = await premise.isDisabled();
-      if (!disabled) {
-        await premise.fill(
-          'A hacker discovers the truth about an AI system controlling Jakarta in 2045.',
-        );
-        await page.fill('input[name="genre"]', 'Cyberpunk');
-        await page.fill('input[name="tone"]', 'Dark and Suspenseful');
-        const save = page.getByRole('button', {
-          name: /Simpan Fondasi|Simpan|Save/i,
-        });
-        if (await save.count()) await save.first().click();
-        await page.waitForTimeout(800);
-        const lock = page.getByRole('button', {
-          name: /Konfirmasi|Lock|Kunci/i,
-        });
-        if (await lock.count()) {
-          await lock.first().click();
-          await page.waitForTimeout(1200);
-        }
-      }
-    }
+    // Foundation edit + lock (expanded readiness checklist)
+    await fillAndLockFoundation(page, projectId, {
+      premise:
+        'A hacker discovers the truth about an AI system controlling Jakarta in 2045.',
+      genre: 'Cyberpunk',
+      tone: 'Dark and Suspenseful',
+    });
 
     // Characters
     await page.goto(`/projects/${projectId}/characters`);
