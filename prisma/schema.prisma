@@ -27,6 +27,34 @@ enum ProjectStartMode {
   advanced
 }
 
+enum FactCanonStatus {
+  confirmed
+  deprecated
+  contradicted
+}
+
+enum ProseStatus {
+  draft
+  validated
+  rejected
+  superseded
+}
+
+enum ProposalSource {
+  ai
+  user
+  system
+}
+
+enum ProposalStatus {
+  pending
+  accepted
+  rejected
+  stale
+  superseded
+  needs_revalidation
+}
+
 model User {
   id            String     @id @default(cuid())
   email         String     @unique
@@ -112,6 +140,19 @@ model Project {
 
   owner User @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
 
+  foundation        Foundation?
+  characters        Character[]
+  facts             Fact[]
+  entityRevisions   CanonicalEntityRevision[]
+  reveals           Reveal[]
+  chapterOutlines   ChapterOutline[]
+  chapters          Chapter[]
+  proposalGroups    ProposalGroup[]
+  changeSets        CanonicalChangeSet[]
+  contextSnapshots  ContextSnapshot[]
+  contextBundles    GenerationContextBundle[]
+  publishArtifacts  PublishPackageArtifact[]
+
   @@unique([ownerUserId, createRequestId])
   @@index([ownerUserId])
   @@map("projects")
@@ -128,4 +169,409 @@ model CreditLedger {
 
   @@index([userId])
   @@map("credit_ledger")
+}
+
+// =============================================================================
+// M1.1a: Canon entity tables
+// =============================================================================
+
+model Foundation {
+  id        String   @id @default(cuid())
+  projectId String   @unique @map("project_id")
+  premise   String?  @db.Text
+  tone      String?
+  genre     String?
+  body      Json?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("foundations")
+}
+
+model Character {
+  id        String    @id @default(cuid())
+  projectId String    @map("project_id")
+  name      String
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  beliefs CharacterBelief[]
+  states  CharacterState[]
+
+  @@index([projectId])
+  @@map("characters")
+}
+
+model Fact {
+  id          String          @id @default(cuid())
+  projectId   String          @map("project_id")
+  factKey     String          @map("fact_key")
+  truth       String          @db.Text
+  canonStatus FactCanonStatus @default(confirmed) @map("canon_status")
+  revision    Int             @default(1)
+  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt   DateTime?       @map("deleted_at") @db.Timestamptz(3)
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  reveals            Reveal[]
+  beliefSources      CharacterBelief[]
+  allowedInBeats     BeatAllowedFact[]
+  forbiddenInBeats   BeatForbiddenFact[]
+
+  @@index([projectId])
+  @@map("facts")
+}
+
+model CharacterBelief {
+  id                String   @id @default(cuid())
+  characterId       String   @map("character_id")
+  beliefKey         String   @map("belief_key")
+  effectiveSequence Int      @map("effective_sequence")
+  beliefContent     String   @map("belief_content") @db.Text
+  confidence        Float    @default(1.0)
+  sourceFactId      String?  @map("source_fact_id")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  character Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  sourceFact Fact?    @relation(fields: [sourceFactId], references: [id], onDelete: SetNull)
+
+  @@unique([characterId, beliefKey, effectiveSequence])
+  @@index([characterId])
+  @@index([sourceFactId])
+  @@map("character_beliefs")
+}
+
+model CharacterState {
+  id          String   @id @default(cuid())
+  characterId String   @map("character_id")
+  sequence    Int
+  state       Json
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  character Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@unique([characterId, sequence])
+  @@map("character_states")
+}
+
+model Reveal {
+  id        String    @id @default(cuid())
+  projectId String    @map("project_id")
+  revealKey String    @map("reveal_key")
+  factId    String    @map("fact_id")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  fact    Fact    @relation(fields: [factId], references: [id], onDelete: Cascade)
+
+  breadcrumbs RevealBreadcrumb[]
+
+  @@index([projectId])
+  @@index([factId])
+  @@map("reveals")
+}
+
+model RevealBreadcrumb {
+  id        String   @id @default(cuid())
+  revealId  String   @map("reveal_id")
+  beatId    String   @map("beat_id")
+  placement String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  reveal Reveal @relation(fields: [revealId], references: [id], onDelete: Cascade)
+  beat   Beat   @relation(fields: [beatId], references: [id], onDelete: Cascade)
+
+  @@index([revealId])
+  @@index([beatId])
+  @@map("reveal_breadcrumbs")
+}
+
+model ChapterOutline {
+  id            String   @id @default(cuid())
+  projectId     String   @map("project_id")
+  chapterNumber Int      @map("chapter_number")
+  title         String?
+  summary       String?  @db.Text
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, chapterNumber])
+  @@index([projectId])
+  @@map("chapter_outlines")
+}
+
+model Chapter {
+  id        String   @id @default(cuid())
+  projectId String   @map("project_id")
+  number    Int
+  title     String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  beats Beat[]
+
+  @@unique([projectId, number])
+  @@index([projectId])
+  @@map("chapters")
+}
+
+model Beat {
+  id                     String   @id @default(cuid())
+  chapterId              String   @map("chapter_id")
+  beatNumber             Int      @map("beat_number")
+  acceptedProseVersionId String?  @map("accepted_prose_version_id")
+  title                  String?
+  summary                String?  @db.Text
+  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  chapter          Chapter              @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  proseVersions    ProseVersion[]
+  allowedFacts     BeatAllowedFact[]
+  forbiddenFacts   BeatForbiddenFact[]
+  breadcrumbs      RevealBreadcrumb[]
+  contextSnapshots ContextSnapshot[]
+  contextBundles   GenerationContextBundle[]
+
+  @@unique([chapterId, beatNumber])
+  @@index([chapterId])
+  @@map("beats")
+}
+
+model BeatAllowedFact {
+  id     String @id @default(cuid())
+  beatId String @map("beat_id")
+  factId String @map("fact_id")
+
+  beat Beat @relation(fields: [beatId], references: [id], onDelete: Cascade)
+  fact Fact @relation(fields: [factId], references: [id], onDelete: Cascade)
+
+  @@unique([beatId, factId])
+  @@map("beat_allowed_facts")
+}
+
+model BeatForbiddenFact {
+  id     String @id @default(cuid())
+  beatId String @map("beat_id")
+  factId String @map("fact_id")
+
+  beat Beat @relation(fields: [beatId], references: [id], onDelete: Cascade)
+  fact Fact @relation(fields: [factId], references: [id], onDelete: Cascade)
+
+  @@unique([beatId, factId])
+  @@map("beat_forbidden_facts")
+}
+
+// =============================================================================
+// M1.1b: Prose, proposals, validation artifacts
+// =============================================================================
+
+model ProseVersion {
+  id          String      @id @default(cuid())
+  beatId      String      @map("beat_id")
+  version     Int
+  content     String      @db.Text
+  contentHash String      @map("content_hash")
+  status      ProseStatus @default(draft)
+  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  beat        Beat               @relation(fields: [beatId], references: [id], onDelete: Cascade)
+  validations ValidationReport[]
+  candidates  GeneratedCandidate[]
+
+  @@unique([beatId, id])
+  @@unique([beatId, version])
+  @@index([beatId])
+  @@map("prose_versions")
+}
+
+model ValidationReport {
+  id             String   @id @default(cuid())
+  proseVersionId String   @map("prose_version_id")
+  candidateId    String?  @map("candidate_id")
+  passed         Boolean
+  findings       Json
+  contentHash    String   @map("content_hash")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  proseVersion ProseVersion        @relation(fields: [proseVersionId], references: [id], onDelete: Cascade)
+  candidate    GeneratedCandidate? @relation(fields: [candidateId], references: [id], onDelete: SetNull)
+
+  @@index([proseVersionId])
+  @@index([candidateId])
+  @@map("validation_reports")
+}
+
+model GeneratedCandidate {
+  id                  String   @id @default(cuid())
+  generationAttemptId String?  @map("generation_attempt_id")
+  candidateIndex      Int      @map("candidate_index")
+  rawResponseBody     String?  @map("raw_response_body") @db.Text
+  parsedOutput        Json?    @map("parsed_output")
+  normalizedOps       Json?    @map("normalized_ops")
+  canonicalOps        Json?    @map("canonical_ops")
+  operationsHash      String?  @map("operations_hash")
+  proseVersionId      String?  @map("prose_version_id")
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  proseVersion       ProseVersion?      @relation(fields: [proseVersionId], references: [id], onDelete: SetNull)
+  validationReports  ValidationReport[]
+
+  @@index([generationAttemptId])
+  @@map("generated_candidates")
+}
+
+model ProposalGroup {
+  id        String   @id @default(cuid())
+  projectId String   @map("project_id")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  proposals Proposal[]
+
+  @@index([projectId])
+  @@map("proposal_groups")
+}
+
+model Proposal {
+  id                        String         @id @default(cuid())
+  proposalGroupId           String         @map("proposal_group_id")
+  source                    ProposalSource
+  status                    ProposalStatus @default(pending)
+  dependencyHash            String         @map("dependency_hash")
+  operationsHash            String         @map("operations_hash")
+  revalidatedFromProposalId String?        @map("revalidated_from_proposal_id")
+  changeSetId               String?        @map("change_set_id")
+  createdAt                 DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                 DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  proposalGroup ProposalGroup @relation(fields: [proposalGroupId], references: [id], onDelete: Cascade)
+  revalidatedFrom Proposal?   @relation("ProposalRevalidation", fields: [revalidatedFromProposalId], references: [id], onDelete: SetNull)
+  revalidatedBy   Proposal[]  @relation("ProposalRevalidation")
+  changeSet       CanonicalChangeSet?
+
+  @@index([proposalGroupId])
+  @@index([revalidatedFromProposalId])
+  @@index([changeSetId])
+  @@map("proposals")
+}
+
+model CanonicalChangeSet {
+  id         String    @id @default(cuid())
+  projectId  String    @map("project_id")
+  proposalId String?   @unique @map("proposal_id")
+  status     String    @default("pending")
+  appliedAt  DateTime? @map("applied_at") @db.Timestamptz(3)
+  rejectedAt DateTime? @map("rejected_at") @db.Timestamptz(3)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  project           Project                  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  proposal          Proposal?                @relation(fields: [proposalId], references: [id], onDelete: SetNull)
+  operations        CanonicalChangeOperation[]
+  revisions         CanonicalEntityRevision[]
+  publishArtifacts  PublishPackageArtifact[]
+
+  @@index([projectId])
+  @@map("canonical_change_sets")
+}
+
+model CanonicalChangeOperation {
+  id          String   @id @default(cuid())
+  changeSetId String   @map("change_set_id")
+  sequence    Int
+  opType      String   @map("op_type")
+  targetType  String   @map("target_type")
+  targetId    String?  @map("target_id")
+  payload     Json
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  changeSet CanonicalChangeSet @relation(fields: [changeSetId], references: [id], onDelete: Cascade)
+
+  @@unique([changeSetId, sequence])
+  @@map("canonical_change_operations")
+}
+
+model CanonicalEntityRevision {
+  id             String   @id @default(cuid())
+  projectId      String   @map("project_id")
+  entityType     String   @map("entity_type")
+  entityId       String   @map("entity_id")
+  changeSetId    String   @map("change_set_id")
+  revision       Int      @default(1)
+  previousHash   String?  @map("previous_hash")
+  newHash        String   @map("new_hash")
+  operationCount Int      @default(1) @map("operation_count")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  project   Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  changeSet CanonicalChangeSet @relation(fields: [changeSetId], references: [id], onDelete: Cascade)
+
+  @@unique([entityId, revision])
+  @@index([projectId])
+  @@index([changeSetId])
+  @@map("canonical_entity_revisions")
+}
+
+model ContextSnapshot {
+  id           String   @id @default(cuid())
+  projectId    String   @map("project_id")
+  beatId       String?  @map("beat_id")
+  snapshotType String   @map("snapshot_type")
+  payload      Json
+  contentHash  String   @map("content_hash")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  beat    Beat?   @relation(fields: [beatId], references: [id], onDelete: SetNull)
+
+  @@index([projectId])
+  @@index([beatId])
+  @@map("context_snapshots")
+}
+
+model GenerationContextBundle {
+  id          String   @id @default(cuid())
+  projectId   String   @map("project_id")
+  beatId      String?  @map("beat_id")
+  bundleType  String   @map("bundle_type")
+  payload     Json
+  contentHash String   @map("content_hash")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  beat    Beat?   @relation(fields: [beatId], references: [id], onDelete: SetNull)
+
+  @@index([projectId])
+  @@index([beatId])
+  @@map("generation_context_bundles")
+}
+
+model PublishPackageArtifact {
+  id           String   @id @default(cuid())
+  projectId    String   @map("project_id")
+  changeSetId  String   @map("change_set_id")
+  artifactType String   @map("artifact_type")
+  contentHash  String   @map("content_hash")
+  payload      Json
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  project   Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  changeSet CanonicalChangeSet @relation(fields: [changeSetId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([changeSetId])
+  @@map("publish_package_artifacts")
 }
