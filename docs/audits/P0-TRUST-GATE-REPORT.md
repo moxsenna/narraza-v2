@@ -81,14 +81,15 @@ P0 trust gate implemented: CI targets `master` with hard gates, mock AI removed 
 
 ## CI evidence
 
-Workflow is configured for `master`. Local gates green.
+Workflow targets `master`. Remote CI **green** on post-P0/P1 follow-up hardening:
 
-**Remote CI run:** push this commit to `origin/master` to materialize Actions runs. After first green run, mark required checks per `docs/BRANCH_PROTECTION.md`.
+- **Success run:** https://github.com/moxsenna/narraza-v2/actions/runs/29706672632
+- **Commit:** `6d6c17c` (`fix(ci): pure unit suites; e2e mail/auth env; security smoke env`)
+- **Jobs all success:** Lint & Typecheck, Unit Tests, Integration Tests, Architecture Boundaries, Migration, Security Smoke, Contract Tests, E2E (Playwright)
 
-If this report is committed before push, CI status will be filled in after Actions completes:
+Earlier P0/P1 pushes exposed real hard-gate issues (vitest project filter, missing eslint flat config, unit job without Postgres, E2E mail path). Fixed without reintroducing soft-fail.
 
-- Actions URL: `https://github.com/moxsenna/narraza-v2/actions`
-- Expected jobs: Lint & Typecheck, Unit Tests, Integration Tests, Architecture Boundaries, Migration, Security Smoke, Contract Tests, E2E (Playwright)
+Branch protection still requires admin apply of required checks — see `docs/BRANCH_PROTECTION.md`.
 
 ## Known limitations remaining
 

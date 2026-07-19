@@ -70,8 +70,15 @@ Expanded Foundation Readiness (score + status + blocking/warning/recommendation)
 1. Validators are deterministic phrase/heuristic gates — not full NLP or structured beat graph enforcement.
 2. Application beat-write pipeline does not yet call `validateProseDeterministic` on every accept path (export ready for wiring; P1 acceptance focused on enforcement capability + tests).
 3. Canon validator uses regex categories + explicit proposal flags; deep family-graph consistency is out of scope.
-4. Remote CI for this P1 commit pending push after local green.
+4. Application beat-write accept path should call `validateProseDeterministic` in a follow-up wiring PR (capability + tests exist).
+
+## CI evidence
+
+Remote CI **green** after P1 + CI hardening:
+
+- https://github.com/moxsenna/narraza-v2/actions/runs/29706672632
+- All required jobs success, including E2E (Playwright) with expanded foundation checklist.
 
 ## Verdict
 
-**P1 local acceptance: PASS.** Safe writing foundation ready for pipeline wiring; readiness no longer title+premise only.
+**P1 acceptance: PASS (local + remote CI).** Safe writing foundation ready for pipeline wiring; readiness no longer title+premise only.
