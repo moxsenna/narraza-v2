@@ -115,12 +115,57 @@ export async function executeIntakeJob(
     response.rawBody,
   );
 
-  // Create ProposalGroup with alternatives
+  const dependenciesHash = ''; // Intake has no canon deps
+  const operationsHash = createHash('sha256')
+    .update(JSON.stringify(output))
+    .digest('hex');
+
+  // Create ProposalGroup with alternatives in transaction
   await uow.execute(async (ports) => {
-    // In production: persist ProposalGroup, Proposal entries, GeneratedCandidate entries
-    // For M4 mock: just mark job succeeded
-    const fullPorts = ports as unknown as FullTxPorts;
-    await fullPorts.generationJobRepo.transitionStatus(jobId, 'running', 'succeeded', {
+    // Get projectId from job
+    const job = await ports.generationJobRepo.findById(jobId);
+    if (!job) throw new Error(`Job ${jobId} not found`);
+    const projectId = job.projectId;
+
+    // Create ProposalGroup
+    const group = await ports.proposalGroupRepo.create({ projectId });
+
+    // For each alternative, create a pending Proposal with its own ChangeSet
+    for (const alt of output.alternatives) {
+      // Create a pending change set
+      const changeSet = await ports.changeSetRepo.create({
+        projectId,
+        status: 'pending',
+      });
+
+      // Add foundation upsert op
+      await ports.changeSetRepo.createOperation({
+        changeSetId: changeSet.id,
+        sequence: 1,
+        opType: 'upsert',
+        targetType: 'foundation',
+        targetId: null,
+        payload: {
+          premise: alt.premise,
+          tone: alt.tone,
+          genre: alt.genre,
+          title: alt.title,
+          altIndex: alt.altIndex,
+        },
+      });
+
+      // Create Proposal linked to change set
+      await ports.proposalRepo.create({
+        proposalGroupId: group.id,
+        source: 'ai',
+        dependencyHash: dependenciesHash,
+        operationsHash,
+        changeSetId: changeSet.id,
+      });
+    }
+
+    // Mark job succeeded
+    await ports.generationJobRepo.transitionStatus(jobId, 'running', 'succeeded', {
       terminalAt: new Date(),
       terminalReasonCode: 'completed',
     });
