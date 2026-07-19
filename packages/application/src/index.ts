@@ -47,3 +47,7 @@ export { editFoundation } from './use-cases/foundation/edit-foundation.js';
 export { lockFoundation } from './use-cases/foundation/lock-foundation.js';
 export type { EditFoundationInput, EditFoundationOutput, FoundationEditPorts } from './use-cases/foundation/edit-foundation.js';
 export type { LockFoundationInput, LockFoundationOutput, FoundationLockPorts } from './use-cases/foundation/lock-foundation.js';
+
+// Character use cases
+export { upsertCharacter } from './use-cases/characters/upsert-character.js';
+export type { UpsertCharacterInput, UpsertCharacterOutput, CharacterUpsertPorts } from './use-cases/characters/upsert-character.js';
