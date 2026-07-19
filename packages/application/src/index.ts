@@ -37,3 +37,7 @@ export type { CanonicalChangeSet, CanonicalChangeOperation, CreateChangeSetInput
 
 // Unit of Work
 export type { TransactionPorts, UnitOfWork, UnitOfWorkOptions } from './unit-of-work.js';
+
+// Authorization
+export { authorizeActiveUser } from './authz/authorize-active-user.js';
+export { lockOwnedProject } from './authz/lock-owned-project.js';
