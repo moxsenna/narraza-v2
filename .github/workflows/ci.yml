@@ -50,11 +50,13 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx prisma generate --schema prisma/schema.prisma
+      # Build packages so workspace dist exports exist for typecheck consumers
+      - run: npm run build -w @narraza/shared -w @narraza/core -w @narraza/ai -w @narraza/db -w @narraza/application
       - run: npm run lint
       - run: npm run typecheck
 
   # ─────────────────────────────────────────────────────────────
-  # Unit tests (shared, core, ai, application)
+  # Unit tests (shared, core, ai, application, db — no DB required subset)
   # ─────────────────────────────────────────────────────────────
   unit:
     name: Unit Tests
@@ -67,8 +69,9 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx prisma generate --schema prisma/schema.prisma
-      # Run only packages — no DB needed for unit tests
-      - run: npx vitest run --project packages/core --project packages/shared --project packages/ai --project packages/application --project packages/db
+      - run: npm run build -w @narraza/shared -w @narraza/core -w @narraza/ai -w @narraza/db -w @narraza/application
+      # Project names match package.json "name" fields
+      - run: npx vitest run --project @narraza/core --project @narraza/shared --project @narraza/ai --project @narraza/application --project @narraza/db
 
   # ─────────────────────────────────────────────────────────────
   # Integration tests (application + db with Postgres)
@@ -99,7 +102,8 @@ jobs:
       - run: npm ci
       - run: npx prisma generate --schema prisma/schema.prisma
       - run: npx prisma migrate deploy --schema prisma/schema.prisma
-      - run: npx vitest run --project packages/application --project packages/db
+      - run: npm run build -w @narraza/shared -w @narraza/core -w @narraza/ai -w @narraza/db -w @narraza/application
+      - run: npx vitest run --project @narraza/application --project @narraza/db
 
   # ─────────────────────────────────────────────────────────────
   # Architecture boundaries (dependency-cruiser)
@@ -177,6 +181,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx prisma generate --schema prisma/schema.prisma
+      - run: npm run build -w @narraza/shared -w @narraza/core -w @narraza/ai -w @narraza/db -w @narraza/application
 
       # Grep for potential secrets in committed files (exclude lock/tsbuildinfo etc)
       - name: Scan for secrets in source
@@ -190,9 +195,12 @@ jobs:
       - name: Build web app then scan
         run: |
           set -euo pipefail
-          cd apps/web
-          npx next build
-          cd ../..
+          export AI_ENABLE_MOCK=true
+          export NODE_ENV=production
+          # next build needs mock allowed only outside production NODE_ENV for AI factory;
+          # security smoke uses mock AI for build-time page data collection.
+          export NODE_ENV=development
+          npm run build -w @narraza/web
           # Scan built JS for API key patterns — must not find any
           if find apps/web/.next -name '*.js' -print -quit 2>/dev/null | grep -q .; then
             if grep -rnE 'sk-[a-zA-Z0-9]{20,}' apps/web/.next/; then
@@ -215,8 +223,9 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx prisma generate --schema prisma/schema.prisma
+      - run: npm run build -w @narraza/shared
       # Run shared env tests as contract sanity
-      - run: npx vitest run --project packages/shared
+      - run: npx vitest run --project @narraza/shared
 
   # ─────────────────────────────────────────────────────────────
   # E2E (Playwright) — with mock AI (hard gate)
@@ -247,9 +256,12 @@ jobs:
       - run: npm ci
       - run: npx prisma generate --schema prisma/schema.prisma
       - run: npx prisma migrate deploy --schema prisma/schema.prisma
+      - run: npm run build -w @narraza/shared -w @narraza/core -w @narraza/ai -w @narraza/db -w @narraza/application
       - name: Install Playwright browsers
         run: npx playwright install chromium --with-deps
       - name: Run E2E tests
         run: npm run test:e2e
         env:
           CI: 'true'
+          AI_ENABLE_MOCK: 'true'
+          NODE_ENV: development

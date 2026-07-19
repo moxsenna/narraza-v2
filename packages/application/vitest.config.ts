@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 
 export default defineConfig({
   test: {
+    name: '@narraza/application',
     environment: 'node',
     include: ['src/**/*.test.ts'],
     testTimeout: 15000,
