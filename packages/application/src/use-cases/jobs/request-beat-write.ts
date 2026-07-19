@@ -8,7 +8,7 @@ import type { AIExecutionPort } from '@narraza/ai';
 import { issueQuote } from '../credit/issue-quote.js';
 import { confirmAndEnqueue } from '../credit/confirm-and-enqueue.js';
 import { buildDependencyManifest } from '@narraza/core';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 
 // =============================================================================
 // Request
@@ -147,7 +147,7 @@ export async function executeBeatRepairStage(
 }
 
 // =============================================================================
-// Full beat pipeline: write → judge → [repair → judge] → succeed
+// Full beat pipeline: write → judge → [repair → judge] → persist prose → succeed
 // =============================================================================
 
 export async function executeBeatJob(
@@ -162,17 +162,44 @@ export async function executeBeatJob(
   // Stage 2: judge first candidate
   const judgeResult = await executeBeatJudgeStage(aiPort, workflowPlan, 1);
 
+  let proseContent = writeResult.candidates[0] as any;
+  let prose: string | null = null;
+
   // If not passed, attempt repair
   if (!judgeResult.passed) {
     // Stage 3: repair (full re-extraction)
-    await executeBeatRepairStage(aiPort, workflowPlan, judgeResult.findings);
-    // Could judge again, but for mock pipeline we stop
+    const repairResult = await executeBeatRepairStage(aiPort, workflowPlan, judgeResult.findings);
+    prose = repairResult.repairedProse;
+  } else if (proseContent && typeof proseContent.prose === 'string') {
+    prose = proseContent.prose;
   }
 
-  // Mark job succeeded
+  // Persist ProseVersion for the beat
   await uow.execute(async (ports) => {
-    const fullPorts = ports as unknown as FullTxPorts;
-    await fullPorts.generationJobRepo.transitionStatus(jobId, 'running', 'succeeded', {
+    // Get job to find beat context
+    const job = await ports.generationJobRepo.findById(jobId);
+    if (!job) throw new Error(`Job ${jobId} not found`);
+
+    const payload = job.payloadJson as Record<string, unknown>;
+    const chapterId = payload.chapterId as string | undefined;
+    const beatNumber = payload.beatNumber as number | undefined;
+
+    if (chapterId && beatNumber) {
+      const beat = await ports.beatRepo.findByChapterAndNumber(chapterId, beatNumber);
+      if (beat && prose) {
+        const version = await ports.proseVersionRepo.nextVersion(beat.id);
+        await ports.proseVersionRepo.create({
+          beatId: beat.id,
+          version,
+          content: prose,
+          contentHash: createHash('sha256').update(prose).digest('hex'),
+          status: 'draft',
+        });
+      }
+    }
+
+    // Mark job succeeded
+    await ports.generationJobRepo.transitionStatus(jobId, 'running', 'succeeded', {
       terminalAt: new Date(),
       terminalReasonCode: 'completed',
     });
