@@ -1,0 +1,334 @@
+# Narraza v2 — Production Deploy workflow
+#
+# Triggered manually (workflow_dispatch) via GitHub UI only.
+# NEVER runs automatically on push — production deploy requires
+# explicit human decision.
+#
+# Uses environment: production with:
+#   - Required reviewers (approval gate, minimum 1 reviewer)
+#   - Branch protection: only main branch, no untrusted PR
+#   - Production-only secrets scoped to this environment
+#
+# Workflow_dispatch cannot be triggered from a PR — only from the
+# default branch (or selected branches), which means untrusted PRs
+# never get production secrets.
+
+name: Deploy Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Branch, tag, or SHA to deploy (must be main or a release tag)'
+        required: true
+        default: 'main'
+        type: string
+      confirm-production:
+        description: 'Type "DEPLOY TO PRODUCTION" to confirm'
+        required: true
+        type: string
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  # ─────────────────────────────────────────────────────────────
+  # Safety gate: validate the confirmation string and ref
+  # ─────────────────────────────────────────────────────────────
+  safety-gate:
+    name: Safety Gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate confirmation string
+        run: |
+          if [ "${{ github.event.inputs.confirm-production }}" != "DEPLOY TO PRODUCTION" ]; then
+            echo "ERROR: You must type exactly 'DEPLOY TO PRODUCTION' in the confirmation field."
+            echo "Received: '${{ github.event.inputs.confirm-production }}'"
+            exit 1
+          fi
+          echo "Confirmation string validated."
+
+      - name: Validate ref is main or a release tag
+        run: |
+          REF="${{ github.event.inputs.ref }}"
+          if [ "$REF" = "main" ] || echo "$REF" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+'; then
+            echo "Ref OK: ${REF}"
+          else
+            echo "ERROR: Production deploy only allowed from 'main' or a release tag (vX.Y.Z)."
+            echo "Received: '${REF}'"
+            exit 1
+          fi
+
+  # ─────────────────────────────────────────────────────────────
+  # Build artifact (same process as staging)
+  # ─────────────────────────────────────────────────────────────
+  build:
+    name: Build Release
+    runs-on: ubuntu-latest
+    needs: safety-gate
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      # Quick CI gate before building (core + shared unit tests, architecture)
+      - run: npx prisma generate --schema prisma/schema.prisma
+      - run: npx vitest run --project packages/core --project packages/shared
+      - run: npm run architecture
+
+      # Build the release artifact
+      - name: Build release artifact
+        run: |
+          mkdir -p releases
+          node deploy/build-release.mjs
+        env:
+          RELEASE_OUTPUT_DIR: releases
+          AI_ENABLE_MOCK: 'true'
+          DATABASE_URL: postgresql://narraza:narraza@localhost:5432/narraza
+          DATABASE_URL_WEB: postgresql://narraza:narraza@localhost:5432/narraza
+          DATABASE_URL_WORKER: postgresql://narraza:narraza@localhost:5432/narraza
+          DATABASE_URL_OUTBOX: postgresql://narraza:narraza@localhost:5432/narraza
+          AUTH_SECRET: prod-build-auth-secret-not-real-not-for-production-use-only
+          AUTH_URL: http://localhost:3000
+          EMAIL_FROM: 'Production Build <noreply@build.local>'
+          EMAIL_CHALLENGE_PEPPER: prod-build-pepper-not-real
+          RATE_LIMIT_PEPPER: prod-build-rate-pepper
+          SIGNUP_GRANT_MICRO_IDR: '5000000000'
+          MAIL_TRANSPORT: file
+          MAIL_FILE_DIR: .data/mail
+          ARTIFACT_STORAGE_PATH: .data/artifacts
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: narraza-release
+          path: releases/
+          retention-days: 14
+
+      - name: Upload manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-manifest
+          path: releases/release-manifest.json
+          retention-days: 14
+
+  # ─────────────────────────────────────────────────────────────
+  # Run full CI gates (unit + integration + migration + contract)
+  # ─────────────────────────────────────────────────────────────
+  ci-gates:
+    name: Full CI Gates
+    runs-on: ubuntu-latest
+    needs: safety-gate
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: narraza
+          POSTGRES_PASSWORD: narraza
+          POSTGRES_DB: narraza
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U narraza -d narraza"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+      - run: npx prisma generate --schema prisma/schema.prisma
+
+      - name: Lint + Typecheck
+        run: |
+          npm run lint
+          npm run typecheck
+
+      - name: Unit tests
+        run: |
+          npx vitest run --project packages/core --project packages/shared \
+            --project packages/ai --project packages/application --project packages/db
+
+      - name: Integration tests
+        run: |
+          npx prisma migrate deploy --schema prisma/schema.prisma
+          npx vitest run --project packages/application --project packages/db
+
+      - name: Migration drift check
+        run: npx prisma migrate status --schema prisma/schema.prisma
+
+      - name: Security smoke
+        run: |
+          ! grep -rnE '(OPENROUTER_API_KEY|GEMINI_API_KEY|DATABASE_URL)\s*=\s*[a-zA-Z0-9_-]{10,}' \
+            --include='*.ts' --include='*.tsx' --include='*.mjs' --include='*.cjs' \
+            --exclude-dir=node_modules --exclude-dir=dist --exclude-dir=.next \
+            --exclude-dir=.git .
+
+  # ─────────────────────────────────────────────────────────────
+  # Deploy to production
+  # ─────────────────────────────────────────────────────────────
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [build, ci-gates]
+    # Environment protection:
+    #   - Required reviewers (minimum 1, typically 2)
+    #   - Production-only secrets
+    #   - Wait timer (optional, can be configured in GitHub UI)
+    #   - Restricted to protected branches
+    environment:
+      name: production
+      # Optional: add a wait timer in GitHub UI (e.g., 5 min)
+      # to prevent accidental fast-approval deploys.
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Download release artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: narraza-release
+          path: releases/
+
+      - name: Verify release manifest
+        run: |
+          if [ ! -f releases/release-manifest.json ]; then
+            echo "ERROR: release-manifest.json not found in artifact"
+            exit 1
+          fi
+          echo "Manifest contents:"
+          cat releases/release-manifest.json
+
+          # Verify checksum
+          TARBALL=$(node -e "
+            const m = require('./releases/release-manifest.json');
+            console.log(m.artifact);
+          ")
+          EXPECTED=$(node -e "
+            const m = require('./releases/release-manifest.json');
+            console.log(m.checksum.value);
+          ")
+          ACTUAL=$(sha256sum "releases/${TARBALL}" | awk '{print $1}')
+          echo "Expected: $EXPECTED"
+          echo "Actual:   $ACTUAL"
+          if [ "$EXPECTED" != "$ACTUAL" ]; then
+            echo "FATAL: Checksum mismatch — aborting deploy"
+            exit 1
+          fi
+          echo "Checksum verified OK"
+
+      # Deploy steps using SSH to production server
+      # Secrets are environment-scoped (production only)
+      - name: Deploy to production server
+        run: |
+          echo "Deploying to production..."
+          echo ""
+          echo "=== PRODUCTION DEPLOY ==="
+          echo "Ref: ${{ github.event.inputs.ref }}"
+          echo "Run ID: ${{ github.run_id }}"
+          echo "Triggered by: ${{ github.actor }}"
+          echo ""
+          # In production, this would:
+          # 1. SCP the tarball to the production server
+          # 2. SSH and run deploy/release.sh with production flags
+          #
+          # Example (commented out — requires production server):
+          # TARBALL=$(node -e "const m = require('./releases/release-manifest.json'); console.log(m.artifact);")
+          # scp "releases/${TARBALL}" "${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }}:/opt/narraza/releases/"
+          # ssh "${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }}" \
+          #   "cd /opt/narraza && bash deploy/release.sh releases/${TARBALL}"
+          #
+          # The release.sh script handles:
+          #   1. Fetch artifact
+          #   2. Verify checksum (abort on mismatch)
+          #   3. Backup (DB + manifest)
+          #   4. Drain workers
+          #   5. Migrate database (with advisory lock via migrate-with-lock.mjs)
+          #   6. Symlink current -> new release
+          #   7. Restart services (PM2)
+          #   8. Ready check + smoke
+          echo "Production deploy placeholder — server connection not configured yet"
+          echo "See deploy/release.sh and deploy/migrate-with-lock.mjs for the full procedure"
+        env:
+          PROD_HOST: ${{ secrets.PROD_HOST }}
+          PROD_USER: ${{ secrets.PROD_USER }}
+
+  # ─────────────────────────────────────────────────────────────
+  # Production smoke test
+  # ─────────────────────────────────────────────────────────────
+  smoke:
+    name: Production Smoke Test
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: ${{ success() }}
+    steps:
+      - name: Smoke test production
+        run: |
+          PROD_URL="${{ secrets.PROD_URL }}"
+          if [ -z "$PROD_URL" ]; then
+            echo "PROD_URL not configured — skipping smoke tests"
+            echo "Configure PROD_URL in production environment secrets"
+            exit 0
+          fi
+
+          echo "Running smoke tests against ${PROD_URL}..."
+
+          # Health check (no DB)
+          HEALTH=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "${PROD_URL}/health")
+          if [ "$HEALTH" != "200" ]; then
+            echo "FAIL: /health returned ${HEALTH}"
+            exit 1
+          fi
+          echo "PASS: /health = ${HEALTH}"
+
+          # Ready check (DB + migration + not draining)
+          READY=$(curl -s --max-time 15 "${PROD_URL}/ready")
+          echo "Ready response: $READY"
+          STATUS=$(echo "$READY" | node -e "
+            let d='';
+            process.stdin.on('data',c=>d+=c);
+            process.stdin.on('end',()=>{
+              const j=JSON.parse(d);
+              process.stdout.write(j.status);
+            });
+          ")
+          if [ "$STATUS" != "ready" ]; then
+            echo "FAIL: /ready status is '${STATUS}', expected 'ready'"
+            exit 1
+          fi
+          echo "PASS: /ready = ${STATUS}"
+
+          # Check that the homepage loads
+          HOME_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "${PROD_URL}/")
+          if [ "$HOME_CODE" != "200" ]; then
+            echo "FAIL: GET / returned ${HOME_CODE}"
+            exit 1
+          fi
+          echo "PASS: GET / = ${HOME_CODE}"
+
+          echo "All production smoke tests passed!"
+        env:
+          PROD_URL: ${{ secrets.PROD_URL }}
