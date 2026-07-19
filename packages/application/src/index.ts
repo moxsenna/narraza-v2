@@ -19,3 +19,9 @@ export {
   formatClearPendingCookie,
   type PendingCookiePayload,
 } from './use-cases/auth/pending-login-cookie.js';
+
+// Project ports and use cases
+export type { Project, CreateProjectInput, ProjectRepo } from './ports/project-ports.js';
+export { createProject, type CreateProjectInput as CreateProjectUCInput, type CreateProjectOutput, type ProjectPorts } from './use-cases/projects/create-project.js';
+export { listProjects, type ListProjectsOutput, type ListProjectsPorts } from './use-cases/projects/list-projects.js';
+export { softDeleteProject, type SoftDeleteProjectOutput, type SoftDeleteProjectPorts } from './use-cases/projects/soft-delete-project.js';
