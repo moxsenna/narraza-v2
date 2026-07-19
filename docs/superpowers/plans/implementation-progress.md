@@ -1,48 +1,49 @@
 # Narraza Implementation Progress
 
 ## Current milestone
-M0 — Scaffold, env, auth, project shell
+M1 — Schema splits + core pure domain
 
 ## Last completed task
-M0.2 — packages/shared env pick parsers + public errors (5/5 tests green)
+M0.5 — dashboard + create project (8 tests)
 
 ## Current task
-M0.3 — Prisma identity baseline
+M1.1a/b migrations + M1.2–M1.5 core domain (parallel)
 
 ## Tests currently green
-- `@narraza/shared` env parsers (5): env-boundary partial
-- typecheck `@narraza/shared` green
+- `@narraza/shared` env parsers (5) — `env-boundary`
+- `@narraza/application` auth-challenge (12) — `challenge-cap`, magic-link prepare/consume
+- `@narraza/application` create-project (8)
+- Total: 25 tests
 
 ## Known failures
 - none
+- Note: web tsc has pre-existing workspace import path noise; Next runtime OK
 
 ## Decisions made
-- Workspace path: `D:/Coding/Narraza Fix/narraza v2` (not `D:/Coding/Narraza`)
-- Jobs/leases migration deferred to M3.0 only (no M1 stubs)
-- foundation.propose always available after concept (regenerate path)
-- Signup grant on first consume provisioning, not dashboard read
-- Env: pick-then-parse only
-- Conflict unique: `(owner_user_id, conflict_key)` partial for queued/running
-- ValidationReport own table
-- Mock AI uses full production pipeline
-- Autonomous goal: no wait for plan re-approval; start M0 after plan commit
-- Execution: subagent-driven-development preferred
-- Node engines: `>=22` (host currently Node 24)
+- Workspace: `D:/Coding/Narraza Fix/narraza v2`
+- Postgres host port **5433** (5432 taken by alie-postgres)
+- Jobs/leases → M3.0 only
+- foundation.propose always available after concept
+- Signup grant on first consume provisioning
+- Env pick-then-parse
+- Node engines `>=22` (host Node 24)
+- Auth Secure cookie flag deferred (local HTTP); production must set Secure
+- Max-3 challenge cap race accepted for M0; tighten with txn later if needed
 
 ## Next exact command
-```bash
-cd "D:/Coding/Narraza Fix/narraza v2"
-docker compose up -d
-# then M0.3 prisma schema + migrate
-```
+Continue M1: canon migration + packages/core writer-packet TDD
 
 ## Git status
-- Commits: plan, specs, M0.1 chore workspace, M0.2 shared
-- Working tree should be clean after progress journal update
+```
+b91f607 feat(web): start paths and dashboard project list
+d23a085 feat(auth): two-step magic link with challenge cap and signup grant
+6e9bcdc feat(db): m0 identity session challenge project
+adc60cd feat(shared): explicit env pick parsers and public errors
+33fc9ab chore: init monorepo workspace
+d19c22e docs(spec): add locked design S1-S10, verification matrix, PRD
+f9defe2 docs(plan): make Narraza implementation plan executable
+```
+Working tree clean after progress journal commit.
 
-## Milestone notes
-### PHASE A
-- Design S1–S10 LOCKED (prior session)
-- Verification matrix present
-- Plan revised to executable form with full M0–M8 task bodies
-- Self-review: no TBD/TODO/expand/etc placeholders for implementation
+## M0 gate
+✅ shared env, challenge suite, create+list project — all green. M0 closed.
