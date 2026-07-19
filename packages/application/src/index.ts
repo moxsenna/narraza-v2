@@ -127,3 +127,129 @@ export type {
 // M3.10 Reaper
 export { reap, fullReaperCycle } from './reconciliation/reaper.js';
 export type { ReaperResult } from './reconciliation/reaper.js';
+
+// =============================================================================
+// M4 Extraction layer (S7)
+// =============================================================================
+export type {
+  ModelSuggestionDraft,
+  NormalizedOperationDraft,
+  CanonicalChangeOperation as ExtractionCanonicalChangeOp,
+  OpIntent,
+  ProseEvidence,
+  ExtractionResult,
+  ExtractionError,
+  TempRefScope,
+  OperationAllowlist,
+  DAGNode,
+  PromptContractVersion,
+} from './extraction/types.js';
+
+export { resolveTempRefs } from './extraction/temp-ref-resolver.js';
+export {
+  buildOperationDAG,
+  deterministicTopoSort,
+  assignSequences,
+} from './extraction/operation-dag.js';
+export {
+  getAllowlist,
+  validateAgainstAllowlist,
+  validateBeatContractOps,
+} from './extraction/operation-policy.js';
+export {
+  computeProseContentHash,
+  extractProseEvidence,
+  validateDisclosureEvidence,
+} from './extraction/prose-evidence.js';
+export {
+  computeOperationsHash,
+  computePayloadHash,
+  verifyHash,
+  verifyProseAcceptOrder,
+} from './extraction/proposal-integrity.js';
+
+// =============================================================================
+// M4 Pipeline use cases
+// =============================================================================
+
+// M4.4 intake.extract
+export {
+  requestIntake,
+  executeIntakeJob,
+} from './use-cases/intake/request-intake.js';
+export type {
+  RequestIntakeInput,
+  RequestIntakeOutput,
+} from './use-cases/intake/request-intake.js';
+
+// M4.5 concept accept
+export { acceptConcept } from './use-cases/concepts/accept-concept.js';
+export type {
+  AcceptConceptInput,
+  AcceptConceptOutput,
+} from './use-cases/concepts/accept-concept.js';
+
+// M4.6 foundation.propose
+export {
+  requestFoundationPropose,
+  executeFoundationProposeJob,
+} from './use-cases/foundation/request-foundation-propose.js';
+export type {
+  RequestFoundationProposeInput,
+  RequestFoundationProposeOutput,
+} from './use-cases/foundation/request-foundation-propose.js';
+
+// M4.7 character.propose
+export {
+  requestCharacterPropose,
+  executeCharacterProposeJob,
+} from './use-cases/characters/request-character-propose.js';
+export type {
+  RequestCharacterProposeInput,
+  RequestCharacterProposeOutput,
+} from './use-cases/characters/request-character-propose.js';
+
+// M4.8 outline.generate
+export {
+  requestOutlineGenerate,
+  executeOutlineGenerateJob,
+  acceptOutlineBatch,
+} from './use-cases/outline/request-outline.js';
+export type {
+  RequestOutlineInput,
+  RequestOutlineOutput,
+  AcceptOutlineBatchInput,
+  AcceptOutlineBatchOutput,
+} from './use-cases/outline/request-outline.js';
+
+// M4.9-M4.10 beat.write + judge + repair
+export {
+  requestBeatWrite,
+  executeBeatWriteStage,
+  executeBeatJudgeStage,
+  executeBeatRepairStage,
+  executeBeatJob,
+  requestBeatRepair,
+} from './use-cases/jobs/request-beat-write.js';
+export type {
+  RequestBeatWriteInput,
+  RequestBeatWriteOutput,
+  RequestBeatRepairInput,
+} from './use-cases/jobs/request-beat-write.js';
+
+// M4.11 proposal revalidation
+export { revalidateProposal } from './use-cases/proposals/revalidate-proposal.js';
+export type {
+  RevalidateProposalInput,
+  RevalidateProposalOutput,
+} from './use-cases/proposals/revalidate-proposal.js';
+
+// M4.12 publish.package
+export {
+  requestPublishPackage,
+  executePublishPackageJob,
+} from './use-cases/publish/request-publish-package.js';
+export type {
+  RequestPublishPackageInput,
+  RequestPublishPackageOutput,
+} from './use-cases/publish/request-publish-package.js';

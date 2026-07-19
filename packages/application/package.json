@@ -17,6 +17,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@narraza/ai": "*",
     "@narraza/core": "*",
     "@narraza/shared": "*"
   },
