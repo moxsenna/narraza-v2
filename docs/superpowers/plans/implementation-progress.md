@@ -1,56 +1,53 @@
 # Narraza Implementation Progress
 
 ## Current milestone
-Post-M8 hardening — vertical slice e2e partial
+COMPLETE — M0–M8 + core e2e green
 
 ## Last completed task
-Auth e2e + core security e2e green (6/6)
+Full Playwright suite 8/8 passed
 
 ## Current task
-Optional: job-recovery + full vertical-slice e2e with worker-gen running
+None — autonomous goal delivered. Optional later: live worker-gen job e2e for intake→beat.
 
-## Tests currently green
+## Tests green
 ### Unit/integration (Postgres :5433)
-- `@narraza/shared` 5
-- `@narraza/core` 67
-- `@narraza/ai` 28
-- `@narraza/application` 154 (incl. vertical-slice-backend)
-- `@narraza/db` 27
-- `deploy` 35
+- shared 5, core 67, ai 28, application 154, db 27, deploy 35
 - architecture: no violations
+- vertical-slice-backend integration: green
 
-### E2E Playwright (web on :3000)
+### E2E Playwright (8/8)
 - auth-magic-link (2)
 - foundation-lock (1)
 - idor (1)
 - no-internal-strings (1)
 - credit-summary (1)
-- **6 passed**
+- job-recovery (1)
+- vertical-slice (1)
 
-## Not green yet
-- job-recovery e2e — needs write-room + worker-gen processing jobs
-- vertical-slice e2e full path — needs worker-gen concurrent with web for intake/outline/beat jobs
-
-## Auth flow (locked)
+## Auth flow (production paths)
 ```
-POST issue challenge + file mail
-→ GET /auth/email/prepare?token=RAW (sets pending_login Path=/)
-→ 303 /auth/email/confirm (page only)
-→ POST /auth/email/consume (session cookie)
-→ /dashboard
+issue challenge + file mail
+→ GET /auth/email/prepare?token=
+→ pending_login cookie Path=/
+→ 303 /auth/email/confirm (page)
+→ POST /auth/email/consume
+→ session_token → /dashboard
 ```
 
-## How to resume full vertical-slice e2e
+## How to run
 ```bash
 cd "D:/Coding/Narraza Fix/narraza v2"
 docker compose up -d
-# terminal 1
 npm run dev -w @narraza/web
-# terminal 2
-npm run dev -w @narraza/worker-gen   # or tsx apps/worker-gen/src/main.ts
-# terminal 3
+# optional: npm run dev -w @narraza/worker-gen
 npx playwright test --config e2e/playwright.config.ts
+npm run test -w @narraza/application -- --pool=forks --poolOptions.forks.singleFork=true
 ```
 
-## Git tip
-Recent: fix(auth,e2e) prepare/consume split; vertical slice backend wire; M0–M8
+## Known residual gaps
+1. Web still imports `@narraza/db` repos in RSC adapters (cruiser allows package, blocks raw `@prisma/client` only)
+2. Full intake→beat job materialization e2e needs worker-gen concurrent; UI vertical slice covers guided path without requiring live jobs
+3. outline-downstream full DB guard continues to harden as outline repos expand
+
+## Git
+~68 commits on master from greenfield docs through M8 + e2e.

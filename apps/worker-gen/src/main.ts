@@ -31,7 +31,21 @@ import { createUserConcurrencySlotRepo } from '@narraza/db/repositories/user-con
 import { createWorkerInstanceRepo } from '@narraza/db/repositories/worker-instance-repo.js';
 import { config } from 'dotenv';
 
-config({ path: '../../.env' });
+import { existsSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+const __workerDir = dirname(fileURLToPath(import.meta.url));
+const envCandidates = [
+  resolve(process.cwd(), '.env'),
+  resolve(process.cwd(), '../../.env'),
+  resolve(__workerDir, '../../../.env'),
+];
+for (const p of envCandidates) {
+  if (existsSync(p)) {
+    config({ path: p });
+    break;
+  }
+}
 
 const INSTANCE_ID = `worker-gen-${randomUUID().slice(0, 8)}`;
 const POLL_INTERVAL_MS = parseInt(process.env.WORKER_GEN_POLL_MS ?? '1000', 10);
