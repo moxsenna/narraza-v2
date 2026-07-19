@@ -17,6 +17,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@narraza/core": "*",
     "@narraza/shared": "*"
   },
   "devDependencies": {

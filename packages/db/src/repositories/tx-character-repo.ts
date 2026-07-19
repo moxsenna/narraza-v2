@@ -1,0 +1,95 @@
+import type { Prisma } from '@prisma/client';
+import type {
+  CharacterRepo,
+  Character,
+  CreateCharacterInput,
+} from '@narraza/application';
+
+type TxClient = Prisma.TransactionClient;
+
+export function createTxCharacterRepo(tx: TxClient): CharacterRepo {
+  return {
+    async findById(id: string): Promise<Character | null> {
+      const row = await tx.character.findUnique({ where: { id } });
+      if (!row) return null;
+      return {
+        id: row.id,
+        projectId: row.projectId,
+        name: row.name,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+        deletedAt: row.deletedAt,
+      };
+    },
+
+    async findActiveByProjectId(projectId: string): Promise<Character[]> {
+      const rows = await tx.character.findMany({
+        where: { projectId, deletedAt: null },
+        orderBy: { createdAt: 'asc' },
+      });
+      return rows.map((row) => ({
+        id: row.id,
+        projectId: row.projectId,
+        name: row.name,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+        deletedAt: row.deletedAt,
+      }));
+    },
+
+    async create(input: CreateCharacterInput): Promise<Character> {
+      const row = await tx.character.create({
+        data: {
+          projectId: input.projectId,
+          name: input.name,
+        },
+      });
+      return {
+        id: row.id,
+        projectId: row.projectId,
+        name: row.name,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+        deletedAt: row.deletedAt,
+      };
+    },
+
+    async updateName(id: string, name: string): Promise<Character | null> {
+      try {
+        const row = await tx.character.update({
+          where: { id, deletedAt: null },
+          data: { name },
+        });
+        return {
+          id: row.id,
+          projectId: row.projectId,
+          name: row.name,
+          createdAt: row.createdAt,
+          updatedAt: row.updatedAt,
+          deletedAt: row.deletedAt,
+        };
+      } catch {
+        return null;
+      }
+    },
+
+    async softDelete(id: string): Promise<Character | null> {
+      try {
+        const row = await tx.character.update({
+          where: { id, deletedAt: null },
+          data: { deletedAt: new Date() },
+        });
+        return {
+          id: row.id,
+          projectId: row.projectId,
+          name: row.name,
+          createdAt: row.createdAt,
+          updatedAt: row.updatedAt,
+          deletedAt: row.deletedAt,
+        };
+      } catch {
+        return null;
+      }
+    },
+  };
+}

@@ -25,3 +25,15 @@ export type { Project, CreateProjectInput, ProjectRepo } from './ports/project-p
 export { createProject, type CreateProjectInput as CreateProjectUCInput, type CreateProjectOutput, type ProjectPorts } from './use-cases/projects/create-project.js';
 export { listProjects, type ListProjectsOutput, type ListProjectsPorts } from './use-cases/projects/list-projects.js';
 export { softDeleteProject, type SoftDeleteProjectOutput, type SoftDeleteProjectPorts } from './use-cases/projects/soft-delete-project.js';
+
+// Foundation ports
+export type { Foundation, UpsertFoundationInput, FoundationRepo } from './ports/foundation-ports.js';
+
+// Character ports
+export type { Character, CreateCharacterInput, CharacterRepo } from './ports/character-ports.js';
+
+// Canonical change set ports
+export type { CanonicalChangeSet, CanonicalChangeOperation, CreateChangeSetInput, CreateChangeOperationInput, CanonicalChangeSetRepo } from './ports/canonical-change-set-ports.js';
+
+// Unit of Work
+export type { TransactionPorts, UnitOfWork, UnitOfWorkOptions } from './unit-of-work.js';
