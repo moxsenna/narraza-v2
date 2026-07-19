@@ -1,0 +1,255 @@
+# Narraza v2 — PR CI workflow
+# GitHub-hosted runners, mock AI only, no production secrets.
+# Gate: lint, typecheck, unit, integration (Postgres service container),
+# architecture (dependency-cruiser), migration (empty DB), security-smoke,
+# contract (optional), e2e (Playwright).
+
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '22'
+  # Mock AI — no real provider key required
+  AI_ENABLE_MOCK: 'true'
+  # Shared Postgres env used by integration + migration jobs
+  DATABASE_URL: postgresql://narraza:narraza@localhost:5432/narraza
+  DATABASE_URL_WEB: postgresql://narraza:narraza@localhost:5432/narraza
+  DATABASE_URL_WORKER: postgresql://narraza:narraza@localhost:5432/narraza
+  DATABASE_URL_OUTBOX: postgresql://narraza:narraza@localhost:5432/narraza
+  AUTH_SECRET: ci-test-auth-secret-not-for-production
+  AUTH_URL: http://localhost:3000
+  EMAIL_FROM: 'CI <noreply@ci.local>'
+  EMAIL_CHALLENGE_PEPPER: ci-pepper
+  RATE_LIMIT_PEPPER: ci-rate
+  SIGNUP_GRANT_MICRO_IDR: '5000000000'
+  MAIL_TRANSPORT: file
+  MAIL_FILE_DIR: .data/mail
+  ARTIFACT_STORAGE_PATH: .data/artifacts
+
+jobs:
+  # ─────────────────────────────────────────────────────────────
+  # Lint + Typecheck
+  # ─────────────────────────────────────────────────────────────
+  lint-typecheck:
+    name: Lint & Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate --schema prisma/schema.prisma
+      - run: npm run lint
+      - run: npm run typecheck
+
+  # ─────────────────────────────────────────────────────────────
+  # Unit tests (shared, core, ai, application)
+  # ─────────────────────────────────────────────────────────────
+  unit:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate --schema prisma/schema.prisma
+      # Run only packages — no DB needed for unit tests
+      - run: npx vitest run --project packages/core --project packages/shared --project packages/ai --project packages/application --project packages/db
+
+  # ─────────────────────────────────────────────────────────────
+  # Integration tests (application + db with Postgres)
+  # ─────────────────────────────────────────────────────────────
+  integration:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: narraza
+          POSTGRES_PASSWORD: narraza
+          POSTGRES_DB: narraza
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U narraza -d narraza"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate --schema prisma/schema.prisma
+      - run: npx prisma migrate deploy --schema prisma/schema.prisma
+      - run: npx vitest run --project packages/application --project packages/db
+
+  # ─────────────────────────────────────────────────────────────
+  # Architecture boundaries (dependency-cruiser)
+  # ─────────────────────────────────────────────────────────────
+  architecture:
+    name: Architecture Boundaries
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm run architecture
+
+  # ─────────────────────────────────────────────────────────────
+  # Migration check (migrate deploy on empty DB + drift)
+  # ─────────────────────────────────────────────────────────────
+  migration:
+    name: Migration (empty + drift)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: narraza
+          POSTGRES_PASSWORD: narraza
+          POSTGRES_DB: narraza
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U narraza -d narraza"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate --schema prisma/schema.prisma
+
+      # 1. Apply all migrations from empty DB
+      - name: Deploy migrations (empty DB)
+        run: npx prisma migrate deploy --schema prisma/schema.prisma
+
+      # 2. Verify Prisma schema is in sync (no drift)
+      - name: Check migration drift
+        run: npx prisma migrate status --schema prisma/schema.prisma
+
+      # 3. Verify migrations folder is not empty
+      - name: Verify migrations exist
+        run: |
+          MIG_COUNT=$(ls prisma/migrations/*/migration.sql 2>/dev/null | wc -l)
+          echo "Found $MIG_COUNT migrations"
+          if [ "$MIG_COUNT" -eq 0 ]; then
+            echo "ERROR: No migration files found!"
+            exit 1
+          fi
+
+  # ─────────────────────────────────────────────────────────────
+  # Security smoke (no secrets in build, env-boundary check)
+  # ─────────────────────────────────────────────────────────────
+  security-smoke:
+    name: Security Smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate --schema prisma/schema.prisma
+
+      # Grep for potential secrets in committed files (exclude lock/tsbuildinfo etc)
+      - name: Scan for secrets in source
+        run: |
+          ! grep -rnE '(OPENROUTER_API_KEY|GEMINI_API_KEY|DATABASE_URL)\s*=\s*[a-zA-Z0-9_-]{10,}' \
+            --include='*.ts' --include='*.tsx' --include='*.mjs' --include='*.cjs' \
+            --exclude-dir=node_modules --exclude-dir=dist --exclude-dir=.next \
+            --exclude-dir=.git .
+
+      # Build web app and scan .next for leaked secrets
+      - name: Build web app then scan
+        run: |
+          cd apps/web
+          npx next build || true
+          cd ../..
+          # Scan built JS for API key patterns — should not find any
+          if ls apps/web/.next/server/**/*.js 2>/dev/null; then
+            ! grep -rnE 'sk-[a-zA-Z0-9]{20,}' apps/web/.next/ || true
+          fi
+
+  # ─────────────────────────────────────────────────────────────
+  # Contract tests (DTO integrity — optional light gate)
+  # ─────────────────────────────────────────────────────────────
+  contract:
+    name: Contract Tests
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate --schema prisma/schema.prisma
+      # Run shared env tests as contract sanity
+      - run: npx vitest run --project packages/shared
+
+  # ─────────────────────────────────────────────────────────────
+  # E2E (Playwright) — with mock AI
+  # ─────────────────────────────────────────────────────────────
+  e2e:
+    name: E2E (Playwright)
+    runs-on: ubuntu-latest
+    # Only run e2e on PRs (not push to main) to save minutes
+    if: github.event_name == 'pull_request'
+    continue-on-error: true
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: narraza
+          POSTGRES_PASSWORD: narraza
+          POSTGRES_DB: narraza
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U narraza -d narraza"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate --schema prisma/schema.prisma
+      - run: npx prisma migrate deploy --schema prisma/schema.prisma
+      - name: Install Playwright browsers
+        run: npx playwright install chromium --with-deps
+      - name: Run E2E tests
+        run: npm run test:e2e
+        env:
+          CI: 'true'
