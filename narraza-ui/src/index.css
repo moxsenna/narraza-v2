@@ -1,0 +1,119 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Narraza design tokens — design.md §25
+ * shadcn HSL vars dipetakan ke palet Narraza agar komponen ui/* tetap on-brand.
+ */
+@layer base {
+  :root {
+    /* Brand (hex asli, dipakai lewat kelas tailwind brand-*) */
+    --color-brand-50: #fff5f8;
+    --color-brand-100: #fce6ee;
+    --color-brand-200: #f7c6d6;
+    --color-brand-300: #ef91af;
+    --color-brand-400: #e35f88;
+    --color-brand-500: #d34875;
+    --color-brand-600: #c13f6b;
+    --color-brand-700: #a62f59;
+    --color-brand-800: #842644;
+    --color-brand-900: #641e35;
+
+    /* Radius (design.md §11.3) */
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-xl: 24px;
+    --radius-pill: 999px;
+    --radius: 12px;
+
+    /* Shadow (design.md §11.4) */
+    --shadow-sm: 0 1px 2px rgba(36, 23, 30, 0.06);
+    --shadow-md: 0 8px 24px rgba(36, 23, 30, 0.08);
+    --shadow-lg: 0 18px 48px rgba(36, 23, 30, 0.12);
+
+    /* Focus ring (design.md §25) */
+    --focus-ring: 0 0 0 3px rgba(239, 145, 175, 0.55);
+
+    /* shadcn mapping → palet Narraza (light only) */
+    --background: 27 100% 98%;          /* canvas #FFF9F6 */
+    --foreground: 326 21% 12%;          /* ink-950 #24171E */
+    --card: 0 0% 100%;
+    --card-foreground: 326 21% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 326 21% 12%;
+    --primary: 340 51% 50%;             /* brand-600 #C13F6B */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 330 33% 96%;           /* surface-soft #F8F1F4 */
+    --secondary-foreground: 323 18% 20%;/* ink-800 */
+    --muted: 322 22% 93%;               /* line-100 #F1E8EC */
+    --muted-foreground: 329 8% 43%;     /* ink-500 #76656D */
+    --accent: 340 100% 98%;             /* brand-50 */
+    --accent-foreground: 323 18% 20%;
+    --destructive: 352 52% 47%;         /* danger-700 #B83A4B */
+    --destructive-foreground: 0 0% 98%;
+    --border: 320 21% 89%;              /* line-200 #E8DCE1 */
+    --input: 320 21% 89%;
+    --ring: 340 76% 75%;                /* brand-300 */
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 323 18% 20%;
+    --sidebar-primary: 340 51% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 340 100% 98%;
+    --sidebar-accent-foreground: 334 55% 42%;
+    --sidebar-border: 320 21% 89%;
+    --sidebar-ring: 340 76% 75%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    @apply scroll-smooth;
+  }
+  body {
+    @apply bg-canvas text-ink-700 font-sans antialiased;
+    font-size: 16px;
+    line-height: 1.6;
+  }
+  h1, h2, h3, h4 {
+    @apply text-ink-950 font-bold tracking-tight;
+  }
+  /* Focus ring global yang selalu terlihat (design.md §19.2) */
+  :focus-visible {
+    outline: none;
+    box-shadow: var(--focus-ring);
+    border-radius: 8px;
+  }
+  ::selection {
+    background: var(--color-brand-100);
+    color: var(--color-brand-900);
+  }
+}
+
+@layer utilities {
+  .font-editorial {
+    font-family: Lora, Georgia, "Times New Roman", serif;
+  }
+  .hero-gradient {
+    background: linear-gradient(135deg, #FFF5F8 0%, #FFF9F6 55%, #F5EDF6 100%);
+  }
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+/* Hormati prefers-reduced-motion (design.md §14.4) */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

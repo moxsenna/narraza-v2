@@ -31,6 +31,10 @@ import {
   extractProseAcceptPayload,
   type ProseValidationContext,
 } from './prose-validation-gate.js';
+import {
+  assertReportContextAcceptable,
+  parseValidationMetaFromFindings,
+} from '../../context/validation-context-snapshot.js';
 
 export interface AcceptProposalInput {
   userId: string;
@@ -200,6 +204,17 @@ export async function acceptProposal(
         report.contentHash === proseAccept.contentHash ||
         (input.contentHash != null && report.contentHash === input.contentHash))
     ) {
+      // P3.0: structural_only / incomplete context reports cannot accept production prose
+      try {
+        assertReportContextAcceptable(
+          parseValidationMetaFromFindings(report.findings),
+        );
+      } catch (err) {
+        throw new InternalUseCaseError(
+          'VALIDATION',
+          err instanceof Error ? err.message : 'Invalid validation context for accept',
+        );
+      }
       assertProseAcceptEligible({
         report,
         expectedBindingHash: report.contentHash,

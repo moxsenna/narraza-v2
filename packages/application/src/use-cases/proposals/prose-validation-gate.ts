@@ -31,20 +31,30 @@ export interface ProseValidationContext {
   beatId: string;
   chapterId: string;
   chapterNumber: number;
-  beatContract?: BeatContract;
-  forbiddenTruths?: string[];
-  futureEventPhrases?: string[];
-  overExplicitBreadcrumbs?: string[];
-  povCharacterId?: string;
-  presentCharacterIds?: string[];
-  knowledgeFacts?: Array<{
-    factId: string;
-    truth: string;
-    knownByCharacterIds: string[];
-  }>;
-  existingCanonTruths?: Array<{ factKey: string; truth: string; category?: string }>;
+  beatContract?: BeatContract | undefined;
+  forbiddenTruths?: string[] | undefined;
+  futureEventPhrases?: string[] | undefined;
+  overExplicitBreadcrumbs?: string[] | undefined;
+  povCharacterId?: string | undefined;
+  presentCharacterIds?: string[] | undefined;
+  knowledgeFacts?:
+    | Array<{
+        factId: string;
+        truth: string;
+        knownByCharacterIds: string[];
+      }>
+    | undefined;
+  existingCanonTruths?:
+    | Array<{ factKey: string; truth: string; category?: string }>
+    | undefined;
   /** Sensitive claims already approved via proposal pipeline */
-  approvedSensitiveCategories?: string[];
+  approvedSensitiveCategories?: string[] | undefined;
+  /** P3: full | structural_only */
+  validationMode?: 'full' | 'structural_only' | undefined;
+  /** P3: complete | incomplete */
+  contextCompleteness?: 'complete' | 'incomplete' | undefined;
+  contextCompilerVersion?: string | undefined;
+  contextSnapshotHash?: string | undefined;
 }
 
 export interface RunProseValidationInput {
@@ -212,6 +222,17 @@ export async function runAndPersistProseValidation(
   );
   const result = validateProseDeterministic(full);
 
+  // Infer full/complete when beat contract + forbidden array present (P2 paths)
+  const inferredFull =
+    Boolean(input.context.beatContract) &&
+    Array.isArray(input.context.forbiddenTruths);
+  const validationMode =
+    input.context.validationMode ??
+    (inferredFull ? 'full' : 'structural_only');
+  const contextCompleteness =
+    input.context.contextCompleteness ??
+    (validationMode === 'full' && inferredFull ? 'complete' : 'incomplete');
+
   // Embed audit meta as info finding (schema has no extra columns)
   const findings: CreateValidationReportInput['findings'] = [
     {
@@ -220,9 +241,12 @@ export async function runAndPersistProseValidation(
       source: 'deterministic',
       message: JSON.stringify({
         validatorVersion: PROSE_VALIDATOR_VERSION,
-        contextSnapshotHash,
+        contextSnapshotHash: input.context.contextSnapshotHash ?? contextSnapshotHash,
+        contextCompilerVersion: input.context.contextCompilerVersion ?? null,
         chapterNumber: input.context.chapterNumber,
         beatId: input.context.beatId,
+        validationMode,
+        contextCompleteness,
       }),
       publicMessageCode: 'meta.validator.context',
       deterministic: true,

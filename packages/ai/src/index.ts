@@ -8,6 +8,19 @@ export {
   createAIExecutionPort,
   type CreateAIExecutionPortOptions,
 } from './create-ai-execution-port.js';
+export {
+  getPromptContract,
+  requirePromptContract,
+  listPromptContracts,
+  validateContractOutput,
+  type PromptContractDefinition,
+  type PromptTaskType,
+} from './prompt-contract-registry.js';
+export {
+  createFakeAIExecutionPort,
+  type FakeProviderConfig,
+  type FakeProviderScenario,
+} from './fake-http-provider.js';
 
 // Prompt contracts
 export {

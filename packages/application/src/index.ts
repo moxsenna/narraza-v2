@@ -366,6 +366,35 @@ export type {
   CreateRepairProseVersionPorts,
 } from './use-cases/proposals/create-repair-prose-version.js';
 
+// P3 Validation context + writer firewall
+export {
+  CONTEXT_COMPILER_VERSION,
+  buildValidationContextSnapshot,
+  snapshotToProseValidationContext,
+  assertProductionProseContextReady,
+  assertReportContextAcceptable,
+  parseValidationMetaFromFindings,
+  assessContextCompleteness,
+} from './context/validation-context-snapshot.js';
+export type {
+  ValidationContextSnapshot,
+  BuildValidationContextInput,
+  ValidationMode,
+  ContextCompleteness,
+} from './context/validation-context-snapshot.js';
+export {
+  WRITER_CONTEXT_COMPILER_VERSION,
+  compileWriterProviderPayload,
+  assertWriterFirewall,
+  enforceWriterFirewallOrThrow,
+} from './context/writer-context-firewall.js';
+export type {
+  WriterProviderPayload,
+  FirewallAssertionResult,
+} from './context/writer-context-firewall.js';
+export { logAiJobEvent, redactSensitive } from './observability/ai-job-log.js';
+export type { AiJobLogFields } from './observability/ai-job-log.js';
+
 // M5.5 PublicProposalView DTO
 export {
   mapToPublicProposalView,
