@@ -70,6 +70,7 @@ export interface CreateGenerationJobInput {
   contextBundleId?: string | null;
   reservationId?: string | null;
   maxExecutionRetries?: number;
+  retryOfJobId?: string | null;
 }
 
 export interface GenerationAttempt {
@@ -163,8 +164,97 @@ export interface CreateUserConcurrencySlotInput {
 }
 
 // =============================================================================
+// Outbox DTOs
+// =============================================================================
+
+export interface OutboxEvent {
+  id: string;
+  dedupeKey: string;
+  status: 'pending' | 'processing' | 'completed' | 'dead';
+  payload: Record<string, unknown>;
+  availableAt: Date;
+  deliveryGeneration: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface CreateOutboxEventInput {
+  dedupeKey: string;
+  payload: Record<string, unknown>;
+  availableAt?: Date;
+}
+
+export interface OutboxConsumerReceipt {
+  id: string;
+  consumerName: string;
+  eventId: string;
+  deliveryGeneration: number;
+  status: 'processing' | 'completed' | 'uncertain' | 'dead';
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface CreateOutboxConsumerReceiptInput {
+  consumerName: string;
+  eventId: string;
+  deliveryGeneration: number;
+}
+
+export interface WorkerInstance {
+  id: string;
+  instanceId: string;
+  role: string;
+  lastHeartbeatAt: Date;
+  draining: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface CreateWorkerInstanceInput {
+  instanceId: string;
+  role: string;
+}
+
+// =============================================================================
 // Repo interfaces
 // =============================================================================
+
+export interface OutboxEventRepo {
+  create(input: CreateOutboxEventInput): Promise<OutboxEvent>;
+  findById(id: string): Promise<OutboxEvent | null>;
+  findByDedupeKey(dedupeKey: string): Promise<OutboxEvent | null>;
+  /** CAS: transition from pending to processing. Returns null if already claimed. */
+  claimForProcessing(id: string, deliveryGeneration: number): Promise<OutboxEvent | null>;
+  /** Mark completed. */
+  markCompleted(id: string): Promise<OutboxEvent | null>;
+  /** Mark dead and increment deliveryGeneration for replay. */
+  markDeadAndBump(id: string, newDeliveryGeneration: number): Promise<OutboxEvent | null>;
+  /** List pending events for polling. */
+  pollPending(limit: number): Promise<OutboxEvent[]>;
+}
+
+export interface OutboxConsumerReceiptRepo {
+  create(input: CreateOutboxConsumerReceiptInput): Promise<OutboxConsumerReceipt>;
+  findById(id: string): Promise<OutboxConsumerReceipt | null>;
+  findByEventAndConsumer(eventId: string, consumerName: string, deliveryGeneration: number): Promise<OutboxConsumerReceipt | null>;
+  /** CAS: mark receipt from processing to completed. */
+  markCompleted(id: string): Promise<OutboxConsumerReceipt | null>;
+  /** CAS: mark receipt from processing to uncertain. */
+  markUncertain(id: string): Promise<OutboxConsumerReceipt | null>;
+  /** CAS: mark receipt from uncertain to dead. */
+  markDead(id: string): Promise<OutboxConsumerReceipt | null>;
+  /** List receipts in processing or uncertain status for a consumer. */
+  listUnresolved(consumerName: string, limit: number): Promise<OutboxConsumerReceipt[]>;
+}
+
+export interface WorkerInstanceRepo {
+  create(input: CreateWorkerInstanceInput): Promise<WorkerInstance>;
+  heartbeat(instanceId: string): Promise<WorkerInstance | null>;
+  setDraining(instanceId: string, draining: boolean): Promise<WorkerInstance | null>;
+  findById(instanceId: string): Promise<WorkerInstance | null>;
+  /** List workers with stale heartbeats (past threshold). */
+  listStaleHeartbeats(threshold: Date, limit: number): Promise<WorkerInstance[]>;
+}
 
 export interface CreditQuoteRepo {
   create(input: CreditQuoteInput): Promise<CreditQuote>;
@@ -221,6 +311,8 @@ export interface GenerationJobRepo {
   pollQueued(limit: number): Promise<GenerationJob[]>;
   /** List running jobs with expired leases for reaping. */
   listExpiredLease(limit: number): Promise<GenerationJob[]>;
+  /** List terminal jobs with unreleased resources (for reaper). */
+  listTerminalWithResources(limit: number): Promise<GenerationJob[]>;
 }
 
 export interface GenerationAttemptRepo {
@@ -300,6 +392,8 @@ export interface OperationalTxPorts {
   creditReservationRepo: CreditReservationRepo;
   attemptCostExposureRepo: AttemptCostExposureRepo;
   concurrencySlotRepo: UserConcurrencySlotRepo;
+  outboxEventRepo: OutboxEventRepo;
+  outboxConsumerReceiptRepo: OutboxConsumerReceiptRepo;
 }
 
 /** Full transaction ports including both existing domain repos and operational repos. */

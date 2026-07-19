@@ -51,6 +51,7 @@ export function createGenerationJobRepo(): GenerationJobRepo {
           contextBundleId: input.contextBundleId ?? null,
           reservationId: input.reservationId ?? null,
           maxExecutionRetries: input.maxExecutionRetries ?? 3,
+          retryOfJobId: input.retryOfJobId ?? null,
         },
       });
       return toDTO(row as unknown as Record<string, unknown>);
@@ -301,6 +302,14 @@ export function createGenerationJobRepo(): GenerationJobRepo {
           status: 'running',
           leaseExpiresAt: { lt: new Date() },
         },
+        take: limit,
+      });
+      return rows.map((r) => toDTO(r as unknown as Record<string, unknown>));
+    },
+    async listTerminalWithResources(limit: number): Promise<GenerationJob[]> {
+      const terminalStatuses = ['succeeded', 'failed', 'dead', 'cancelled'] as const;
+      const rows = await prisma.generationJob.findMany({
+        where: { status: { in: terminalStatuses as any } },
         take: limit,
       });
       return rows.map((r) => toDTO(r as unknown as Record<string, unknown>));

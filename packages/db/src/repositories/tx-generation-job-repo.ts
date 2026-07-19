@@ -34,6 +34,7 @@ export function createTxGenerationJobRepo(tx: TxClient): GenerationJobRepo {
           contextBundleId: input.contextBundleId ?? null,
           reservationId: input.reservationId ?? null,
           maxExecutionRetries: input.maxExecutionRetries ?? 3,
+          retryOfJobId: input.retryOfJobId ?? null,
         },
       });
       return toDTO(row);
@@ -137,6 +138,15 @@ export function createTxGenerationJobRepo(tx: TxClient): GenerationJobRepo {
         where: { status: 'running', leaseExpiresAt: { lt: new Date() } }, take: limit,
       });
       return rows.map(toDTO);
+    },
+    async listTerminalWithResources(limit: number): Promise<GenerationJob[]> {
+      const terminalStatuses = ['succeeded', 'failed', 'dead', 'cancelled'] as const;
+      const rows = await tx.generationJob.findMany({
+        where: { status: { in: terminalStatuses as any } },
+        include: { concurrencySlots: true, reservations: true },
+        take: limit,
+      });
+      return rows.map((r: any) => toDTO(r));
     },
   };
 }
