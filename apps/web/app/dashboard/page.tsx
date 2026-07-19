@@ -42,20 +42,29 @@ export default async function DashboardPage() {
       ) : (
         <ul style={{ listStyle: 'none', padding: 0 }}>
           {projects.map((project) => (
-            <li
-              key={project.id}
-              style={{
+	            <li
+	              key={project.id}
+	              style={{
                 border: '1px solid #e0e0e0',
                 borderRadius: 4,
                 padding: '12px 16px',
                 marginBottom: 8,
+                transition: 'border-color 0.2s',
               }}
             >
-              <div style={{ fontWeight: 600 }}>{project.title}</div>
-              <div style={{ color: '#666', fontSize: 14, marginTop: 4 }}>
-                {project.startMode === 'guided' ? 'Guided' : 'Advanced'} on{' '}
-                {project.createdAt.toLocaleDateString()}
-              </div>
+              <Link
+                href={`/projects/${project.id}`}
+                style={{ textDecoration: 'none', color: 'inherit' }}
+              >
+                <div style={{ fontWeight: 600 }}>{project.title}</div>
+                <div style={{ color: '#666', fontSize: 14, marginTop: 4 }}>
+                  {project.startMode === 'guided' ? 'Guided' : 'Advanced'} on{' '}
+                  {project.createdAt.toLocaleDateString()}
+                </div>
+                <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 4 }}>
+                  Status: {project.foundationStatus === 'locked' ? 'Fondasi terkunci' : project.foundationStatus === 'draft' ? 'Fondasi draft' : 'Fondasi kosong'}
+                </div>
+              </Link>
             </li>
           ))}
         </ul>
