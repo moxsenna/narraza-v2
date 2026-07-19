@@ -16,8 +16,11 @@ function findRepoRoot(): string {
 }
 
 const REPO_ROOT = findRepoRoot();
+// Relative MAIL_FILE_DIR must resolve against repo root (Playwright cwd may be e2e/).
 const MAIL_DIR = process.env.MAIL_FILE_DIR
-  ? path.resolve(process.env.MAIL_FILE_DIR)
+  ? path.isAbsolute(process.env.MAIL_FILE_DIR)
+    ? process.env.MAIL_FILE_DIR
+    : path.join(REPO_ROOT, process.env.MAIL_FILE_DIR)
   : path.join(REPO_ROOT, '.data', 'mail');
 
 function listMailFiles(): string[] {
