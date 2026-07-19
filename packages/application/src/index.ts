@@ -33,7 +33,20 @@ export type { Foundation, UpsertFoundationInput, FoundationRepo } from './ports/
 export type { Character, CreateCharacterInput, CharacterRepo } from './ports/character-ports.js';
 
 // Canonical change set ports
-export type { CanonicalChangeSet, CanonicalChangeOperation, CreateChangeSetInput, CreateChangeOperationInput, CanonicalChangeSetRepo } from './ports/canonical-change-set-ports.js';
+export type {
+  CanonicalChangeSet,
+  CanonicalChangeOperation,
+  CreateChangeSetInput,
+  CreateChangeOperationInput,
+  CanonicalChangeSetRepo,
+  EntityRevisionRecord,
+  Fact,
+  FactRepo,
+  Beat,
+  BeatRepo,
+  ProseVersion,
+  ProseVersionRepo,
+} from './ports/canonical-change-set-ports.js';
 
 // Unit of Work
 export type { TransactionPorts, UnitOfWork, OperationalUnitOfWork, UnitOfWorkOptions } from './unit-of-work.js';

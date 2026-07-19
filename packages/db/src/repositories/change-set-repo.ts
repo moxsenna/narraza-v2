@@ -166,5 +166,25 @@ export function createChangeSetRepo(): CanonicalChangeSetRepo {
         },
       });
     },
+
+    async findLatestEntityRevision(
+      projectId: string,
+      entityType: string,
+      entityId: string,
+    ) {
+      const row = await prisma.canonicalEntityRevision.findFirst({
+        where: { projectId, entityType, entityId },
+        orderBy: { revision: 'desc' },
+      });
+      if (!row) return null;
+      return {
+        projectId: row.projectId,
+        entityType: row.entityType,
+        entityId: row.entityId,
+        revision: row.revision,
+        previousHash: row.previousHash,
+        newHash: row.newHash,
+      };
+    },
   };
 }

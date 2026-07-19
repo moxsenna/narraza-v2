@@ -8,7 +8,17 @@ import type {
 type TxClient = Prisma.TransactionClient;
 
 export function createTxWorkingDraftRepo(tx: TxClient): ProseWorkingDraftRepo {
-  function mapDraft(row: any): ProseWorkingDraft {
+  function mapDraft(row: {
+    id: string;
+    userId: string;
+    beatId: string;
+    content: string;
+    contentHash: string;
+    version: number;
+    deletedAt: Date | null;
+    createdAt: Date;
+    updatedAt: Date;
+  }): ProseWorkingDraft {
     return {
       id: row.id,
       userId: row.userId,
@@ -24,12 +34,16 @@ export function createTxWorkingDraftRepo(tx: TxClient): ProseWorkingDraftRepo {
 
   return {
     async save(input: SaveWorkingDraftInput): Promise<ProseWorkingDraft> {
-      const existing = await (tx as any).proseWorkingDraft.findFirst({
-        where: { userId: input.userId, beatId: input.beatId, deletedAt: null },
+      const existing = await tx.proseWorkingDraft.findFirst({
+        where: {
+          userId: input.userId,
+          beatId: input.beatId,
+          deletedAt: null,
+        },
       });
 
       if (!existing) {
-        const row = await (tx as any).proseWorkingDraft.create({
+        const row = await tx.proseWorkingDraft.create({
           data: {
             userId: input.userId,
             beatId: input.beatId,
@@ -41,30 +55,39 @@ export function createTxWorkingDraftRepo(tx: TxClient): ProseWorkingDraftRepo {
         return mapDraft(row);
       }
 
-      if (
-        input.expectedVersion !== undefined &&
-        existing.version !== input.expectedVersion
-      ) {
-        throw new Error(
-          `CAS_CONFLICT: expected version ${input.expectedVersion}, got ${existing.version}`,
-        );
-      }
+      // Atomic CAS: UPDATE ... WHERE version = expected
+      const expectedVersion = input.expectedVersion ?? existing.version;
 
-      const newVersion = existing.version + 1;
-      const row = await (tx as any).proseWorkingDraft.update({
-        where: { id: existing.id },
+      const updated = await tx.proseWorkingDraft.updateMany({
+        where: {
+          id: existing.id,
+          version: expectedVersion,
+          deletedAt: null,
+        },
         data: {
           content: input.content,
           contentHash: input.contentHash,
-          version: newVersion,
-          updatedAt: new Date(),
+          version: expectedVersion + 1,
         },
       });
+
+      if (updated.count === 0) {
+        throw new Error(
+          `CAS_CONFLICT: expected version ${expectedVersion}, concurrent modification`,
+        );
+      }
+
+      const row = await tx.proseWorkingDraft.findUnique({
+        where: { id: existing.id },
+      });
+      if (!row) {
+        throw new Error('CAS_CONFLICT: draft disappeared after update');
+      }
       return mapDraft(row);
     },
 
     async findById(id: string): Promise<ProseWorkingDraft | null> {
-      const row = await (tx as any).proseWorkingDraft.findUnique({
+      const row = await tx.proseWorkingDraft.findUnique({
         where: { id },
       });
       if (!row) return null;
@@ -75,7 +98,7 @@ export function createTxWorkingDraftRepo(tx: TxClient): ProseWorkingDraftRepo {
       userId: string,
       beatId: string,
     ): Promise<ProseWorkingDraft | null> {
-      const row = await (tx as any).proseWorkingDraft.findFirst({
+      const row = await tx.proseWorkingDraft.findFirst({
         where: { userId, beatId, deletedAt: null },
       });
       if (!row) return null;
@@ -83,11 +106,15 @@ export function createTxWorkingDraftRepo(tx: TxClient): ProseWorkingDraftRepo {
     },
 
     async softDelete(id: string): Promise<ProseWorkingDraft | null> {
-      const updated = await (tx as any).proseWorkingDraft.update({
-        where: { id },
-        data: { deletedAt: new Date(), updatedAt: new Date() },
-      });
-      return mapDraft(updated);
+      try {
+        const updated = await tx.proseWorkingDraft.update({
+          where: { id },
+          data: { deletedAt: new Date() },
+        });
+        return mapDraft(updated);
+      } catch {
+        return null;
+      }
     },
   };
 }

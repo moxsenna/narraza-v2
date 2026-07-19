@@ -44,6 +44,9 @@ import { createTxProposalGroupRepo } from '../../../db/src/repositories/tx-propo
 import { createTxProposalRepo } from '../../../db/src/repositories/tx-proposal-repo.js';
 import { createTxWorkingDraftRepo } from '../../../db/src/repositories/tx-working-draft-repo.js';
 import { createTxValidationReportRepo } from '../../../db/src/repositories/tx-validation-report-repo.js';
+import { createTxFactRepo } from '../../../db/src/repositories/tx-fact-repo.js';
+import { createTxBeatRepo } from '../../../db/src/repositories/tx-beat-repo.js';
+import { createTxProseVersionRepo } from '../../../db/src/repositories/tx-prose-version-repo.js';
 import { createLedgerRepo } from '../../../db/src/repositories/ledger-repo.js';
 import { setPrisma } from '../../../db/src/client.js';
 
@@ -136,6 +139,9 @@ function makeTxPorts(tx: any) {
     proposalRepo: createTxProposalRepo(tx),
     workingDraftRepo: createTxWorkingDraftRepo(tx),
     validationReportRepo: createTxValidationReportRepo(tx),
+    factRepo: createTxFactRepo(tx),
+    beatRepo: createTxBeatRepo(tx),
+    proseVersionRepo: createTxProseVersionRepo(tx),
   };
 }
 
@@ -235,6 +241,20 @@ function makeInMemPorts() {
       const rev = { ...input };
       entityRevisions.push(rev);
       return rev;
+    },
+    async findLatestEntityRevision(
+      projectId: string,
+      entityType: string,
+      entityId: string,
+    ) {
+      const matches = entityRevisions.filter(
+        (r) =>
+          r.projectId === projectId &&
+          r.entityType === entityType &&
+          r.entityId === entityId,
+      );
+      if (matches.length === 0) return null;
+      return matches.reduce((a, b) => (a.revision > b.revision ? a : b));
     },
   };
 

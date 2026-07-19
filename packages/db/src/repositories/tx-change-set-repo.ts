@@ -166,5 +166,25 @@ export function createTxChangeSetRepo(tx: TxClient): CanonicalChangeSetRepo {
         },
       });
     },
+
+    async findLatestEntityRevision(
+      projectId: string,
+      entityType: string,
+      entityId: string,
+    ) {
+      const row = await tx.canonicalEntityRevision.findFirst({
+        where: { projectId, entityType, entityId },
+        orderBy: { revision: 'desc' },
+      });
+      if (!row) return null;
+      return {
+        projectId: row.projectId,
+        entityType: row.entityType,
+        entityId: row.entityId,
+        revision: row.revision,
+        previousHash: row.previousHash,
+        newHash: row.newHash,
+      };
+    },
   };
 }

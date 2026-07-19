@@ -1,7 +1,12 @@
 import type { ProjectRepo } from './ports/project-ports.js';
 import type { FoundationRepo } from './ports/foundation-ports.js';
 import type { CharacterRepo } from './ports/character-ports.js';
-import type { CanonicalChangeSetRepo } from './ports/canonical-change-set-ports.js';
+import type {
+  CanonicalChangeSetRepo,
+  FactRepo,
+  BeatRepo,
+  ProseVersionRepo,
+} from './ports/canonical-change-set-ports.js';
 import type { FullTxPorts } from './ports/operational-ports.js';
 import type {
   ProposalGroupRepo,
@@ -23,6 +28,10 @@ export interface TransactionPorts {
   proposalRepo: ProposalRepo;
   workingDraftRepo: ProseWorkingDraftRepo;
   validationReportRepo: ValidationReportRepo;
+  /** Domain write ports for commitCanonicalChangeSet single write door. */
+  factRepo: FactRepo;
+  beatRepo: BeatRepo;
+  proseVersionRepo: ProseVersionRepo;
 }
 
 export interface UnitOfWorkOptions {

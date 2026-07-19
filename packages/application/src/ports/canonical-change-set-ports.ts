@@ -33,6 +33,15 @@ export interface CreateChangeOperationInput {
   payload: Record<string, unknown>;
 }
 
+export interface EntityRevisionRecord {
+  projectId: string;
+  entityType: string;
+  entityId: string;
+  revision: number;
+  previousHash: string | null;
+  newHash: string;
+}
+
 export interface CanonicalChangeSetRepo {
   create(input: CreateChangeSetInput): Promise<CanonicalChangeSet>;
   createOperation(input: CreateChangeOperationInput): Promise<CanonicalChangeOperation>;
@@ -56,4 +65,76 @@ export interface CanonicalChangeSetRepo {
     newHash: string;
     operationCount?: number;
   }): Promise<unknown>;
+  /** Latest revision for an entity in a project, or null if none. */
+  findLatestEntityRevision(
+    projectId: string,
+    entityType: string,
+    entityId: string,
+  ): Promise<EntityRevisionRecord | null>;
+}
+
+export interface Fact {
+  id: string;
+  projectId: string;
+  factKey: string;
+  truth: string;
+  canonStatus: 'confirmed' | 'deprecated' | 'contradicted';
+  revision: number;
+  createdAt: Date;
+  updatedAt: Date;
+  deletedAt: Date | null;
+}
+
+export interface FactRepo {
+  findById(id: string): Promise<Fact | null>;
+  findActiveByProjectAndKey(projectId: string, factKey: string): Promise<Fact | null>;
+  upsert(input: {
+    id?: string;
+    projectId: string;
+    factKey: string;
+    truth: string;
+    canonStatus?: 'confirmed' | 'deprecated' | 'contradicted';
+  }): Promise<Fact>;
+  softDelete(id: string): Promise<Fact | null>;
+}
+
+export interface ProseVersion {
+  id: string;
+  beatId: string;
+  version: number;
+  content: string;
+  contentHash: string;
+  status: string;
+  createdAt: Date;
+}
+
+export interface Beat {
+  id: string;
+  chapterId: string;
+  beatNumber: number;
+  acceptedProseVersionId: string | null;
+  title: string | null;
+  summary: string | null;
+}
+
+export interface BeatRepo {
+  findById(id: string): Promise<Beat | null>;
+  /** Set accepted prose pointer. Must satisfy composite FK (beat_id, prose_version_id). */
+  setAcceptedProseVersion(
+    beatId: string,
+    proseVersionId: string,
+  ): Promise<Beat | null>;
+}
+
+export interface ProseVersionRepo {
+  findById(id: string): Promise<ProseVersion | null>;
+  create(input: {
+    beatId: string;
+    version: number;
+    content: string;
+    contentHash: string;
+    status?: string;
+  }): Promise<ProseVersion>;
+  /** Next version number for a beat (max+1 or 1). */
+  nextVersion(beatId: string): Promise<number>;
 }

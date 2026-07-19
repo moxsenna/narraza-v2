@@ -8,14 +8,16 @@
  * - CAS: update only if expectedVersion matches current stored version
  * - Insert: if no existing draft, create with version=1
  * - Update: bump version, set new content + contentHash
+ * - When projectId provided: ownership check via lockOwnedProject
  *
  * Matrix: working-draft
  */
 
-import type { ProseWorkingDraftRepo, ProseWorkingDraft } from '../../ports/proposal-ports.js';
+import type { ProseWorkingDraftRepo } from '../../ports/proposal-ports.js';
 import type { UserRepo } from '../../ports/auth-ports.js';
 import type { ProjectRepo } from '../../ports/project-ports.js';
 import { authorizeActiveUser } from '../../authz/authorize-active-user.js';
+import { lockOwnedProject } from '../../authz/lock-owned-project.js';
 import { InternalUseCaseError } from '@narraza/shared';
 import { createHash } from 'node:crypto';
 
@@ -25,6 +27,11 @@ export interface SaveWorkingDraftInput {
   content: string;
   /** If provided, CAS guard: only save if current version matches. */
   expectedVersion?: number;
+  /**
+   * Optional project ownership check. When provided with projectRepo,
+   * verifies the user owns the project (prevents cross-tenant draft writes).
+   */
+  projectId?: string;
 }
 
 export interface SaveWorkingDraftOutput {
@@ -54,10 +61,7 @@ function computeContentHash(content: string): string {
  * If no existing draft for this (user, beat), creates one at version 1.
  * If an existing draft exists:
  *   - If expectedVersion is provided but doesn't match → CONFLICT (CAS fail)
- *   - Otherwise bumps version, updates content and hash
- *
- * Does NOT validate that the user owns the project that contains the beat —
- * beat ownership is checked by the caller or UI layer.
+ *   - Otherwise bumps version, updates content and hash via atomic CAS save
  */
 export async function saveWorkingDraft(
   ports: SaveWorkingDraftPorts,
@@ -65,6 +69,15 @@ export async function saveWorkingDraft(
 ): Promise<SaveWorkingDraftOutput> {
   // Authorize
   await authorizeActiveUser(ports.userRepo, input.userId);
+
+  // Optional ownership check when projectId provided
+  if (input.projectId) {
+    await lockOwnedProject(
+      ports.projectRepo,
+      input.projectId,
+      input.userId,
+    );
+  }
 
   const contentHash = computeContentHash(input.content);
 
@@ -74,7 +87,6 @@ export async function saveWorkingDraft(
   );
 
   if (!existing) {
-    // Insert new draft
     const draft = await ports.workingDraftRepo.save({
       userId: input.userId,
       beatId: input.beatId,
@@ -94,7 +106,7 @@ export async function saveWorkingDraft(
     };
   }
 
-  // Update existing draft with CAS
+  // CAS guard before write
   if (
     input.expectedVersion !== undefined &&
     existing.version !== input.expectedVersion
@@ -119,12 +131,13 @@ export async function saveWorkingDraft(
     };
   }
 
+  // Atomic CAS update via expectedVersion on save
   const draft = await ports.workingDraftRepo.save({
     userId: input.userId,
     beatId: input.beatId,
     content: input.content,
     contentHash,
-    expectedVersion: existing.version,
+    expectedVersion: input.expectedVersion ?? existing.version,
   });
 
   return {

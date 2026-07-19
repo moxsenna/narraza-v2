@@ -10,7 +10,7 @@
  * 6. Applies CanonicalChangeOperations via commitCanonicalChangeSet
  * 7. Bumps entity revisions; project.currentCanonicalVersion +1 once
  * 8. Accepts proposal + supersedes siblings in same transaction
- * 9. On CAS fail / unique violation → NEW transaction marks proposal stale
+ * 9. On CAS fail / unique violation → marks proposal stale (recovery)
  *
  * Matrix: accept-proposal, accept-cas-stale, accept-supersede, fact-lifecycle
  */
@@ -18,18 +18,42 @@
 import type { TransactionPorts } from '../../unit-of-work.js';
 import type { ProposalTxPorts } from '../../ports/proposal-ports.js';
 import type { UserRepo } from '../../ports/auth-ports.js';
+import type {
+  FactRepo,
+  BeatRepo,
+  ProseVersionRepo,
+} from '../../ports/canonical-change-set-ports.js';
+import type { FoundationRepo } from '../../ports/foundation-ports.js';
+import type { CharacterRepo } from '../../ports/character-ports.js';
 import { authorizeActiveUser } from '../../authz/authorize-active-user.js';
 import { lockOwnedProject } from '../../authz/lock-owned-project.js';
 import { evaluateStalePolicy } from '@narraza/core';
 import { InternalUseCaseError } from '@narraza/shared';
 import { commitCanonicalChangeSet } from './commit-canonical-change-set.js';
+import { isOverridable } from '../../dto/public-proposal-view.js';
 
 export interface AcceptProposalInput {
   userId: string;
   projectId: string;
   proposalId: string;
-  /** Optional map of finding codes to override (server allows override for these). */
+  /** Optional finding codes to override (must be server-allowlisted). */
   overrides?: string[];
+  /**
+   * Current dependency hash from canon. When provided and differs from
+   * proposal.dependencyHash, stale policy rejects accept.
+   */
+  currentDependencyHash?: string;
+  /** Whether dependency entity revisions changed (feeds stale policy). */
+  depRevisionsChanged?: boolean;
+  /** Whether proposal can be regenerated (needs_revalidation vs stale). */
+  regenerable?: boolean;
+  /**
+   * Optional prose version for ValidationReport eligibility check.
+   * When omitted, eligibility check is skipped (e.g. pure structure proposals).
+   */
+  proseVersionId?: string;
+  /** Optional content hash to match validation report binding. */
+  contentHash?: string;
 }
 
 export interface AcceptProposalOutput {
@@ -45,18 +69,23 @@ export interface AcceptProposalOutput {
 
 /**
  * Full ports needed for acceptProposal — combines TransactionPorts with
- * proposal-specific ports.
+ * proposal-specific ports and optional domain write ports.
  */
 export interface AcceptProposalPorts extends TransactionPorts, ProposalTxPorts {
   userRepo: UserRepo;
+  foundationRepo?: FoundationRepo;
+  characterRepo?: CharacterRepo;
+  factRepo?: FactRepo;
+  beatRepo?: BeatRepo;
+  proseVersionRepo?: ProseVersionRepo;
 }
 
 /**
  * Accept a pending proposal and commit its change set to canon atomically.
  *
  * The entire accept operation runs within the caller's transaction boundary.
- * If commitCanonicalChangeSet fails with a CAS/unique violation, a separate
- * recovery transaction marks the proposal stale.
+ * If commitCanonicalChangeSet fails with a CAS/unique violation, recovery
+ * marks the proposal stale WHERE status='pending'.
  */
 export async function acceptProposal(
   ports: AcceptProposalPorts,
@@ -89,27 +118,63 @@ export async function acceptProposal(
     );
   }
 
-  // 5. Stale policy evaluation
-  if (proposal.changeSetId) {
-    const staleResult = evaluateStalePolicy({
-      currentDependencyHash: proposal.dependencyHash,
-      proposalDependencyHash: proposal.dependencyHash,
-      proposalVersion: project.currentCanonicalVersion,
-      currentCanonicalVersion: project.currentCanonicalVersion,
-      depRevisionsChanged: false,
-      regenerable: false,
-    });
+  // 5. Stale policy evaluation (dependency-based)
+  const currentDependencyHash =
+    input.currentDependencyHash ?? proposal.dependencyHash;
+  const depRevisionsChanged =
+    input.depRevisionsChanged ??
+    currentDependencyHash !== proposal.dependencyHash;
 
-    if (staleResult.status !== 'valid') {
-      throw new InternalUseCaseError(
-        'STALE_PROPOSAL',
-        `Proposal is ${staleResult.status}: ${staleResult.reason}`,
-      );
+  const staleResult = evaluateStalePolicy({
+    currentDependencyHash,
+    proposalDependencyHash: proposal.dependencyHash,
+    proposalVersion: project.currentCanonicalVersion,
+    currentCanonicalVersion: project.currentCanonicalVersion,
+    depRevisionsChanged,
+    regenerable: input.regenerable ?? true,
+  });
+
+  if (staleResult.status !== 'valid') {
+    throw new InternalUseCaseError(
+      'STALE_PROPOSAL',
+      `Proposal is ${staleResult.status}: ${staleResult.reason}`,
+    );
+  }
+
+  // 6. Eligibility from ValidationReport (when linked prose provided)
+  if (input.proseVersionId && ports.validationReportRepo) {
+    const report = input.contentHash
+      ? await ports.validationReportRepo.findValidReport(
+          input.proseVersionId,
+          input.contentHash,
+        )
+      : await ports.validationReportRepo.findLatestByProseVersionId(
+          input.proseVersionId,
+        );
+
+    if (report && !report.passed) {
+      const blockers = report.findings.filter((f) => f.severity === 'blocker');
+      const overrideSet = new Set(input.overrides ?? []);
+      const unresolved = blockers.filter((b) => {
+        if (!isOverridable(b.code) && !isOverridable(b.publicMessageCode)) {
+          return true;
+        }
+        // Overridable only if caller listed the code
+        return (
+          !overrideSet.has(b.code) && !overrideSet.has(b.publicMessageCode)
+        );
+      });
+
+      if (unresolved.length > 0) {
+        throw new InternalUseCaseError(
+          'VALIDATION',
+          `Proposal not eligible: ${unresolved.length} blocking finding(s) without override`,
+        );
+      }
     }
   }
 
-  // 6. Eligibility from ValidationReport
-  // For proposals without a change set, we skip validation check.
+  // 7. Require change set
   if (!proposal.changeSetId) {
     throw new InternalUseCaseError(
       'VALIDATION',
@@ -125,56 +190,74 @@ export async function acceptProposal(
     );
   }
 
-  // 7. Commit the change set to canon (within same transaction)
-  const commitResult = await commitCanonicalChangeSet(
-    { projectRepo: ports.projectRepo, changeSetRepo: ports.changeSetRepo },
-    {
-      changeSetId: proposal.changeSetId,
-      projectId: input.projectId,
-      userId: input.userId,
-    },
-  );
-
-  // 8. Transition proposal to accepted
-  const accepted = await ports.proposalRepo.transitionStatus(
-    proposal.id,
-    'pending',
-    'accepted',
-    { changeSetId: proposal.changeSetId },
-  );
-
-  if (!accepted) {
-    // CAS failure: this should not happen under serializable isolation,
-    // but handle defensively.
-    throw new InternalUseCaseError(
-      'CAS_CONFLICT',
-      'Failed to transition proposal to accepted — concurrent modification',
+  try {
+    // 8. Commit the change set to canon (within same transaction)
+    const commitResult = await commitCanonicalChangeSet(
+      {
+        projectRepo: ports.projectRepo,
+        changeSetRepo: ports.changeSetRepo,
+        foundationRepo: ports.foundationRepo,
+        characterRepo: ports.characterRepo,
+        factRepo: ports.factRepo,
+        beatRepo: ports.beatRepo,
+        proseVersionRepo: ports.proseVersionRepo,
+      },
+      {
+        changeSetId: proposal.changeSetId,
+        projectId: input.projectId,
+        userId: input.userId,
+      },
     );
+
+    // 9. Transition proposal to accepted
+    const accepted = await ports.proposalRepo.transitionStatus(
+      proposal.id,
+      'pending',
+      'accepted',
+      { changeSetId: proposal.changeSetId },
+    );
+
+    if (!accepted) {
+      throw new InternalUseCaseError(
+        'CAS_CONFLICT',
+        'Failed to transition proposal to accepted — concurrent modification',
+      );
+    }
+
+    // 10. Supersede siblings in same group
+    const siblingsSuperseded = await ports.proposalRepo.supersedeSiblings(
+      proposal.proposalGroupId,
+      proposal.id,
+    );
+
+    return {
+      proposalId: proposal.id,
+      newStatus: 'accepted',
+      changeSetId: proposal.changeSetId,
+      operationsApplied: commitResult.operationsApplied,
+      entitiesRevised: commitResult.entitiesRevised,
+      newCanonicalVersion: commitResult.newCanonicalVersion,
+      siblingsSuperseded,
+      acceptedAt: new Date(),
+    };
+  } catch (err) {
+    // CAS / unique violation recovery: mark proposal stale if still pending
+    if (
+      err instanceof InternalUseCaseError &&
+      (err.code === 'CAS_CONFLICT' || err.code === 'CONFLICT')
+    ) {
+      await markProposalStaleOnCasFail(
+        { proposalRepo: ports.proposalRepo },
+        proposal.id,
+      );
+    }
+    throw err;
   }
-
-  // 9. Supersede siblings in same group
-  const siblingsSuperseded = await ports.proposalRepo.supersedeSiblings(
-    proposal.proposalGroupId,
-    proposal.id,
-  );
-
-  return {
-    proposalId: proposal.id,
-    newStatus: 'accepted',
-    changeSetId: proposal.changeSetId,
-    operationsApplied: commitResult.operationsApplied,
-    entitiesRevised: commitResult.entitiesRevised,
-    newCanonicalVersion: commitResult.newCanonicalVersion,
-    siblingsSuperseded,
-    acceptedAt: new Date(),
-  };
 }
 
 /**
- * Recovery function: called outside the original transaction when
- * commitCanonicalChangeSet fails with CAS/unique violation.
- *
- * This runs a NEW transaction to mark the proposal stale WHERE status='pending'.
+ * Recovery function: called when commitCanonicalChangeSet fails with
+ * CAS/unique violation. Marks proposal stale WHERE status='pending'.
  */
 export interface AcceptRecoveryPorts {
   proposalRepo: ProposalTxPorts['proposalRepo'];
