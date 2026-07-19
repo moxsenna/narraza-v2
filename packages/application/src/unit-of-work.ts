@@ -3,6 +3,12 @@ import type { FoundationRepo } from './ports/foundation-ports.js';
 import type { CharacterRepo } from './ports/character-ports.js';
 import type { CanonicalChangeSetRepo } from './ports/canonical-change-set-ports.js';
 import type { FullTxPorts } from './ports/operational-ports.js';
+import type {
+  ProposalGroupRepo,
+  ProposalRepo,
+  ProseWorkingDraftRepo,
+  ValidationReportRepo,
+} from './ports/proposal-ports.js';
 
 /**
  * Transaction-scoped ports: repos available only within a running transaction.
@@ -13,6 +19,10 @@ export interface TransactionPorts {
   foundationRepo: FoundationRepo;
   characterRepo: CharacterRepo;
   changeSetRepo: CanonicalChangeSetRepo;
+  proposalGroupRepo: ProposalGroupRepo;
+  proposalRepo: ProposalRepo;
+  workingDraftRepo: ProseWorkingDraftRepo;
+  validationReportRepo: ValidationReportRepo;
 }
 
 export interface UnitOfWorkOptions {

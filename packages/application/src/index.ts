@@ -253,3 +253,101 @@ export type {
   RequestPublishPackageInput,
   RequestPublishPackageOutput,
 } from './use-cases/publish/request-publish-package.js';
+
+// =============================================================================
+// M5 Accept, working draft, DTOs, progress, credit
+// =============================================================================
+
+// Proposal ports
+export type {
+  ProposalGroup,
+  Proposal,
+  CreateProposalGroupInput,
+  CreateProposalInput,
+  ProseWorkingDraft,
+  SaveWorkingDraftInput,
+  ValidationReportEntry,
+  CreateValidationReportInput,
+  ProposalGroupRepo,
+  ProposalRepo,
+  ProseWorkingDraftRepo,
+  ValidationReportRepo,
+  ProposalTxPorts,
+} from './ports/proposal-ports.js';
+
+// M5.1 commitCanonicalChangeSet + acceptProposal
+export { commitCanonicalChangeSet } from './use-cases/proposals/commit-canonical-change-set.js';
+export type {
+  CommitChangeSetInput,
+  CommitChangeSetOutput,
+  CommitChangeSetPorts,
+} from './use-cases/proposals/commit-canonical-change-set.js';
+export {
+  acceptProposal,
+  markProposalStaleOnCasFail,
+} from './use-cases/proposals/accept-proposal.js';
+export type {
+  AcceptProposalInput,
+  AcceptProposalOutput,
+  AcceptProposalPorts,
+  AcceptRecoveryPorts,
+} from './use-cases/proposals/accept-proposal.js';
+
+// M5.2 ProseWorkingDraft autosave CAS
+export { saveWorkingDraft } from './use-cases/prose/save-working-draft.js';
+export type {
+  SaveWorkingDraftInput as SaveDraftInput,
+  SaveWorkingDraftOutput as SaveDraftOutput,
+  SaveWorkingDraftPorts as SaveDraftPorts,
+} from './use-cases/prose/save-working-draft.js';
+
+// M5.3 Validation hash binding
+export {
+  checkValidationStaleness,
+  createValidationReport,
+} from './use-cases/proposals/validation-hash.js';
+export type {
+  CheckValidationStalenessInput,
+  CheckValidationStalenessOutput,
+  ValidationHashPorts,
+} from './use-cases/proposals/validation-hash.js';
+
+// M5.4 User-origin prose proposal
+export { submitUserProse } from './use-cases/proposals/submit-user-prose.js';
+export type {
+  SubmitUserProseInput,
+  SubmitUserProseOutput,
+  SubmitUserProsePorts,
+} from './use-cases/proposals/submit-user-prose.js';
+
+// M5.5 PublicProposalView DTO
+export {
+  mapToPublicProposalView,
+  isOverridable,
+} from './dto/public-proposal-view.js';
+export type {
+  PublicProposalView,
+  PublicProposalViewInput,
+  PublicFinding,
+  AvailableAction,
+} from './dto/public-proposal-view.js';
+
+// M5.6 ProjectProgressView reducer
+export { computeProjectProgress } from './progress/project-progress.js';
+export type {
+  ProjectProgressView,
+  ProjectProgressViewInput,
+  ProjectPhase,
+  ProgressChip,
+  DashboardCta,
+} from './progress/project-progress.js';
+
+// M5.7 CreditSummary read model
+export { getCreditSummary } from './use-cases/credit/get-credit-summary.js';
+export type {
+  CreditSummary,
+  GetCreditSummaryInput,
+  CreditSummaryPorts,
+  CreditLedgerSummaryEntry,
+  ReservationSummary,
+} from './use-cases/credit/get-credit-summary.js';

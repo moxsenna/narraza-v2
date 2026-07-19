@@ -1,49 +1,52 @@
 # Narraza Implementation Progress
 
 ## Current milestone
-M3 — Jobs, credit, S8 reliability
+M4 — AI contracts + backend vertical slice + S7 extraction
 
 ## Last completed task
-M2.4 — user-origin character upsert
+M3.12 — reliability gate green (87 application tests)
 
 ## Current task
-M3.0 — Migration jobs/credits/outbox
+M4.1 — AIExecutionPort + mock provider + buildWorkflowPlan
 
 ## Tests currently green
 - `@narraza/shared` (5)
-- `@narraza/core` (67) — writer-packet, dependency-hash, stale-policy, expression, belief, disclosure, repair, merge-findings, readiness
-- `@narraza/db` (11) — m1-schema, unit-of-work
-- `@narraza/application` (46) — auth, project, active-user, foundation, character
+- `@narraza/core` (67)
+- `@narraza/db` (11)
+- `@narraza/application` (87) including full M3 reliability gate
 - architecture: no violations
-- **Total: 129 tests**
+- **~170 tests**
+
+## M3 gate matrix (all green)
+- lease-fence-publish, job-terminal, exec-retry
+- reservation-exposure, invocation-winner, late-attempt
+- outbox-idempotent, outbox-uncertain-delivery, outbox-replay-generation
+- cancel-queued, retry-new-job, tombstone-mid-attempt
 
 ## Known failures
 - none
-- Vitest Node 24: use `--pool=forks --poolOptions.forks.singleFork=true`
+- Vitest Node 24: `--pool=forks --poolOptions.forks.singleFork=true`
 - Postgres host port 5433
 
 ## Decisions made
 - Workspace: `D:/Coding/Narraza Fix/narraza v2`
-- M1 migrations combined into single `m1_all_canon_prose`
-- M2 minimal `commitUserFoundationChange` path (full commitCanonicalChangeSet expands M5)
-- Jobs/leases start M3.0
-- foundation.propose always available after concept
-- Signup grant on first consume provisioning
-- Env pick-then-parse
+- Outbox receipt can complete from `uncertain` (re-drive after side-effect failure)
+- Jobs/leases land M3.0; full reliability M3.1–M3.12
+- Mock AI uses full production pipeline (starts M4)
 
 ## Next exact command
-Implement M3.0 schema migration for jobs/credits/outbox, then reliability suite.
-
-## Git status (tip)
-```
-129636f feat(application): user-origin character upsert
-724d9e3 feat(application): foundation edit and lock
-c224740 feat(application): active user guard and owned locks
-1d8f8fd feat(db): serializable unit of work
-```
+Implement packages/ai mock provider + M4.3 extraction layer + intake/concept/outline/beat pipelines.
 
 ## Milestone gates
 - M0 ✅
 - M1 ✅
-- M2 ✅ (create project → edit foundation → lock confirm → add character)
-- M3 in progress
+- M2 ✅
+- M3 ✅
+- M4 in progress
+
+## Git tip
+```
+fix(m3): outbox re-drive from uncertain...
+984e8f0 test(m3): reliability gate green with mock job
+17d23f6 feat(workers): gen and outbox processes with graceful drain
+```

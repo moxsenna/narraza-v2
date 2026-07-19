@@ -19,6 +19,10 @@ import { createTxAttemptCostExposureRepo } from './repositories/tx-attempt-cost-
 import { createTxUserConcurrencySlotRepo } from './repositories/tx-user-concurrency-slot-repo.js';
 import { createTxOutboxEventRepo } from './repositories/tx-outbox-event-repo.js';
 import { createTxOutboxConsumerReceiptRepo } from './repositories/tx-outbox-consumer-receipt-repo.js';
+import { createTxProposalGroupRepo } from './repositories/tx-proposal-group-repo.js';
+import { createTxProposalRepo } from './repositories/tx-proposal-repo.js';
+import { createTxWorkingDraftRepo } from './repositories/tx-working-draft-repo.js';
+import { createTxValidationReportRepo } from './repositories/tx-validation-report-repo.js';
 import { Prisma } from '@prisma/client';
 
 const DEFAULT_MAX_RETRIES = 3;
@@ -71,6 +75,10 @@ export function createPrismaUnitOfWork(prisma: PrismaClient): UnitOfWork {
           foundationRepo: createTxFoundationRepo(tx),
           characterRepo: createTxCharacterRepo(tx),
           changeSetRepo: createTxChangeSetRepo(tx),
+          proposalGroupRepo: createTxProposalGroupRepo(tx),
+          proposalRepo: createTxProposalRepo(tx),
+          workingDraftRepo: createTxWorkingDraftRepo(tx),
+          validationReportRepo: createTxValidationReportRepo(tx),
         };
         return fn(ports);
       }, options);
@@ -90,6 +98,10 @@ export function createPrismaOperationalUnitOfWork(prisma: PrismaClient): Operati
           foundationRepo: createTxFoundationRepo(tx),
           characterRepo: createTxCharacterRepo(tx),
           changeSetRepo: createTxChangeSetRepo(tx),
+          proposalGroupRepo: createTxProposalGroupRepo(tx),
+          proposalRepo: createTxProposalRepo(tx),
+          workingDraftRepo: createTxWorkingDraftRepo(tx),
+          validationReportRepo: createTxValidationReportRepo(tx),
           creditQuoteRepo: createTxCreditQuoteRepo(tx),
           generationJobRepo: createTxGenerationJobRepo(tx),
           generationAttemptRepo: createTxGenerationAttemptRepo(tx),

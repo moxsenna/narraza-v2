@@ -86,6 +86,8 @@ export interface LedgerRepo {
   }): Promise<CreditLedgerEntry>;
   findByDedupeKey(dedupeKey: string): Promise<CreditLedgerEntry | null>;
   countByDedupeKey(dedupeKey: string): Promise<number>;
+  /** List all ledger entries for a user. */
+  listByUserId(userId: string): Promise<CreditLedgerEntry[]>;
 }
 
 export interface AuthPorts {

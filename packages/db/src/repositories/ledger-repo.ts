@@ -50,5 +50,20 @@ export function createLedgerRepo(): LedgerRepo {
         where: { dedupeKey },
       });
     },
+
+    async listByUserId(userId: string): Promise<CreditLedgerEntry[]> {
+      const rows = await prisma.creditLedger.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'asc' },
+      });
+      return rows.map((row) => ({
+        id: row.id,
+        userId: row.userId,
+        entryType: row.entryType,
+        amountMicro: row.amountMicro,
+        dedupeKey: row.dedupeKey,
+        createdAt: row.createdAt,
+      }));
+    },
   };
 }
