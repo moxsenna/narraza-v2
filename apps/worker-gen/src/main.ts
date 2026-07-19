@@ -9,14 +9,20 @@
  * - SIGTERM graceful: pre-provider requeue fenced; mid-provider drain
  */
 
-import { setPrisma } from '@narraza/db';
+import { setPrisma, getPrisma, createPrismaOperationalUnitOfWork } from '@narraza/db';
 import { PrismaClient } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import {
   claimJob,
   transitionJobStatus,
   closeReservation,
+  executeIntakeJob,
+  executeOutlineGenerateJob,
+  executeBeatJob,
+  executeFoundationProposeJob,
+  executeCharacterProposeJob,
 } from '@narraza/application';
+import { createMockAIExecutionPort } from '@narraza/ai';
 import { createGenerationJobRepo } from '@narraza/db/repositories/generation-job-repo.js';
 import { createGenerationAttemptRepo } from '@narraza/db/repositories/generation-attempt-repo.js';
 import { createCreditReservationRepo } from '@narraza/db/repositories/credit-reservation-repo.js';
@@ -102,9 +108,62 @@ async function processJob(
       return;
     }
 
-    // ---- MOCK PROVIDER CALL ----
-    const mockSuccess = true;
-    // ---- END MOCK ----
+    // ---- DISPATCH TO JOB EXECUTOR ----
+    const uow = createPrismaOperationalUnitOfWork(getPrisma());
+    const aiPort = createMockAIExecutionPort();
+    const payload = claimed.payloadJson as Record<string, unknown>;
+    const jobType = claimed.jobType;
+    const workflowPlan = (payload as any)?.workflowPlan ?? {};
+
+    try {
+      switch (jobType) {
+        case 'intake.extract':
+          await executeIntakeJob(uow, aiPort, currentJobId, workflowPlan);
+          break;
+        case 'outline.generate':
+          await executeOutlineGenerateJob(uow, aiPort, currentJobId, workflowPlan);
+          break;
+        case 'beat.write':
+        case 'beat.repair':
+          await executeBeatJob(uow, aiPort, currentJobId, workflowPlan);
+          break;
+        case 'foundation.propose':
+          await executeFoundationProposeJob(uow, aiPort, currentJobId, workflowPlan);
+          break;
+        case 'character.propose':
+          await executeCharacterProposeJob(uow, aiPort, currentJobId, workflowPlan);
+          break;
+        default:
+          // Unknown job type — fail rather than mock succeed
+          await transitionJobStatus(
+            jobRepo, currentJobId, 'running', 'failed',
+            { terminalReasonCode: `unknown_job_type:${jobType}` },
+          );
+          return;
+      }
+    } catch (err) {
+      // Check cancel before retry
+      const retryJob = await jobRepo.findById(currentJobId);
+      if (retryJob?.cancelRequestedAt) {
+        await transitionJobStatus(jobRepo, currentJobId, 'running', 'cancelled', {
+          terminalReasonCode: 'cancelled_mid_attempt',
+        });
+        return;
+      }
+
+      const job = await jobRepo.findById(currentJobId);
+      if (job && job.executionRetryCount < job.maxExecutionRetries) {
+        await transitionJobStatus(jobRepo, currentJobId, 'running', 'queued', {
+          executionRetryCount: job.executionRetryCount + 1,
+        });
+      } else {
+        await transitionJobStatus(jobRepo, currentJobId, 'running', 'failed', {
+          terminalReasonCode: err instanceof Error ? err.message.slice(0, 200) : 'execution_error',
+        });
+      }
+      return;
+    }
+    // ---- END JOB DISPATCH ----
 
     // Check cancel requested after provider call (mid-provider drain)
     const midProviderJob = await jobRepo.findById(currentJobId);

@@ -11,6 +11,7 @@
     "dev": "tsx src/main.ts"
   },
   "dependencies": {
+    "@narraza/ai": "*",
     "@narraza/application": "*",
     "@narraza/db": "*",
     "@narraza/shared": "*",
