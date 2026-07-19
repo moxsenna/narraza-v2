@@ -27,4 +27,13 @@ export interface ProjectRepo {
   create(input: CreateProjectInput): Promise<Project>;
   listByOwnerUserId(ownerUserId: string): Promise<Project[]>;
   softDelete(id: string): Promise<Project | null>;
+  /** Lock a project row for update, returns current state */
+  lockForUpdate(id: string): Promise<Project | null>;
+  /** Update foundationStatus */
+  updateFoundationStatus(
+    id: string,
+    status: 'none' | 'draft' | 'locked',
+  ): Promise<Project | null>;
+  /** Bump currentCanonicalVersion by given increment */
+  bumpCanonicalVersion(id: string, increment: number): Promise<Project | null>;
 }

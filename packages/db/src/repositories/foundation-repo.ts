@@ -1,16 +1,12 @@
-import type { Prisma } from '@prisma/client';
-import type {
-  FoundationRepo,
-  Foundation,
-  UpsertFoundationInput,
-} from '@narraza/application';
+import type { FoundationRepo, Foundation, UpsertFoundationInput } from '@narraza/application';
+import { getPrisma } from '../client.js';
 
-type TxClient = Prisma.TransactionClient;
+export function createFoundationRepo(): FoundationRepo {
+  const prisma = getPrisma();
 
-export function createTxFoundationRepo(tx: TxClient): FoundationRepo {
   return {
     async findByProjectId(projectId: string): Promise<Foundation | null> {
-      const row = await tx.foundation.findUnique({
+      const row = await prisma.foundation.findUnique({
         where: { projectId },
       });
       if (!row) return null;
@@ -40,7 +36,7 @@ export function createTxFoundationRepo(tx: TxClient): FoundationRepo {
       if (input.genre !== undefined) updateData['genre'] = input.genre;
       if (input.body !== undefined) updateData['body'] = input.body;
 
-      const row = await tx.foundation.upsert({
+      const row = await prisma.foundation.upsert({
         where: { projectId: input.projectId },
         create: createData as any,
         update: updateData as any,

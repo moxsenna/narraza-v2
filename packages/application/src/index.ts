@@ -41,3 +41,9 @@ export type { TransactionPorts, UnitOfWork, UnitOfWorkOptions } from './unit-of-
 // Authorization
 export { authorizeActiveUser } from './authz/authorize-active-user.js';
 export { lockOwnedProject } from './authz/lock-owned-project.js';
+
+// Foundation use cases
+export { editFoundation } from './use-cases/foundation/edit-foundation.js';
+export { lockFoundation } from './use-cases/foundation/lock-foundation.js';
+export type { EditFoundationInput, EditFoundationOutput, FoundationEditPorts } from './use-cases/foundation/edit-foundation.js';
+export type { LockFoundationInput, LockFoundationOutput, FoundationLockPorts } from './use-cases/foundation/lock-foundation.js';
