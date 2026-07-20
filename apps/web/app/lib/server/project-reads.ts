@@ -128,6 +128,138 @@ export async function listChaptersWithBeats(projectId: string) {
   });
 }
 
+export type PublicFindingView = {
+  code: string;
+  severity: 'blocker' | 'warning' | 'info' | string;
+  message: string;
+  publicMessageCode?: string;
+};
+
+export type BeatWriteBundle = {
+  beatId: string;
+  chapterId: string;
+  chapterNumber: number;
+  beatNumber: number;
+  title: string | null;
+  summary: string | null;
+  acceptedProseVersionId: string | null;
+  workingDraft: {
+    content: string;
+    version: number;
+    updatedAt: Date;
+  } | null;
+  proseVersions: Array<{
+    id: string;
+    version: number;
+    content: string;
+    contentHash: string;
+    status: string;
+    createdAt: Date;
+    report: {
+      id: string;
+      passed: boolean;
+      findings: PublicFindingView[];
+      createdAt: Date;
+    } | null;
+  }>;
+};
+
+/**
+ * Write Room read model: chapters/beats + drafts + prose versions + latest validation.
+ * Strips internal-only finding noise for display.
+ */
+export async function listBeatWriteBundles(
+  projectId: string,
+  userId: string,
+): Promise<BeatWriteBundle[]> {
+  const prisma = getPrisma();
+  const chapters = await prisma.chapter.findMany({
+    where: { projectId },
+    include: {
+      beats: {
+        orderBy: { beatNumber: 'asc' },
+        include: {
+          proseVersions: {
+            orderBy: { version: 'desc' },
+            take: 5,
+            include: {
+              validations: {
+                orderBy: { createdAt: 'desc' },
+                take: 1,
+              },
+            },
+          },
+          workingDrafts: {
+            where: { userId, deletedAt: null },
+            take: 1,
+            orderBy: { updatedAt: 'desc' },
+          },
+        },
+      },
+    },
+    orderBy: { number: 'asc' },
+  });
+
+  const bundles: BeatWriteBundle[] = [];
+  for (const ch of chapters) {
+    for (const beat of ch.beats) {
+      const draft = beat.workingDrafts[0] ?? null;
+      bundles.push({
+        beatId: beat.id,
+        chapterId: ch.id,
+        chapterNumber: ch.number,
+        beatNumber: beat.beatNumber,
+        title: beat.title,
+        summary: beat.summary,
+        acceptedProseVersionId: beat.acceptedProseVersionId,
+        workingDraft: draft
+          ? {
+              content: draft.content,
+              version: draft.version,
+              updatedAt: draft.updatedAt,
+            }
+          : null,
+        proseVersions: beat.proseVersions.map((pv) => {
+          const raw = pv.validations[0] ?? null;
+          const findingsRaw = Array.isArray(raw?.findings)
+            ? (raw!.findings as Array<Record<string, unknown>>)
+            : [];
+          const findings: PublicFindingView[] = findingsRaw
+            .filter((f) => f && f.code !== 'META_VALIDATOR_CONTEXT')
+            .map((f) => {
+              const view: PublicFindingView = {
+                code: String(f.code ?? 'unknown'),
+                severity: String(f.severity ?? 'info'),
+                message: String(f.message ?? f.publicMessageCode ?? ''),
+              };
+              if (typeof f.publicMessageCode === 'string') {
+                view.publicMessageCode = f.publicMessageCode;
+              }
+              return view;
+            });
+          return {
+            id: pv.id,
+            version: pv.version,
+            content: pv.content,
+            contentHash: pv.contentHash,
+            status: pv.status,
+            createdAt: pv.createdAt,
+            report: raw
+              ? {
+                  id: raw.id,
+                  passed: raw.passed,
+                  findings,
+                  createdAt: raw.createdAt,
+                }
+              : null,
+          };
+        }),
+      });
+    }
+  }
+  return bundles;
+}
+
 export async function checkDbConnectivity(): Promise<boolean> {
   const prisma = getPrisma();
   const rows = await prisma.$queryRawUnsafe<Array<{ result: number }>>(
