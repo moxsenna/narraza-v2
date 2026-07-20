@@ -242,6 +242,63 @@ function isRetryableHttpStatus(status: number): boolean {
 }
 
 /**
+ * Normalize common provider omissions so Zod contracts still pass.
+ * Does not invent plot — only fills structural required fields.
+ */
+function normalizeContractRawBody(
+  promptContractVersion: string,
+  rawBody: string,
+): string {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawBody);
+  } catch {
+    return rawBody;
+  }
+
+  if (promptContractVersion === 'beat.write.v1' && parsed && typeof parsed === 'object') {
+    const obj = parsed as {
+      candidates?: Array<Record<string, unknown>>;
+    };
+    if (Array.isArray(obj.candidates)) {
+      obj.candidates = obj.candidates.map((c, i) => {
+        const next = { ...c };
+        if (typeof next.candidateIndex !== 'number') {
+          next.candidateIndex = i + 1;
+        }
+        if (!Array.isArray(next.suggestions)) {
+          next.suggestions = [];
+        }
+        if (typeof next.prose === 'string') {
+          // strip accidental markdown fences
+          next.prose = next.prose
+            .replace(/^```(?:json|text|markdown)?\s*/i, '')
+            .replace(/\s*```$/i, '')
+            .trim();
+        }
+        return next;
+      });
+      return JSON.stringify(obj);
+    }
+  }
+
+  if (promptContractVersion === 'beat.repair.v1' && parsed && typeof parsed === 'object') {
+    const obj = parsed as Record<string, unknown>;
+    if (!Array.isArray(obj.suggestions)) obj.suggestions = [];
+    if (!Array.isArray(obj.addressedFindings)) obj.addressedFindings = [];
+    if (typeof obj.repairedProse === 'string') {
+      obj.repairedProse = obj.repairedProse
+        .replace(/^```(?:json|text|markdown)?\s*/i, '')
+        .replace(/\s*```$/i, '')
+        .trim();
+    }
+    return JSON.stringify(obj);
+  }
+
+  return rawBody;
+}
+
+/**
  * Create production AIExecutionPort (OpenAI-compatible /v1/chat/completions).
  */
 export function createProductionAIExecutionPort(
@@ -294,6 +351,7 @@ export function createProductionAIExecutionPort(
         },
         body: JSON.stringify({
           model,
+          stream: false,
           messages: [
             { role: 'system', content: system },
             { role: 'user', content: userContent },
@@ -313,9 +371,14 @@ export function createProductionAIExecutionPort(
         throw err;
       }
 
-      const body = (await res.json()) as {
+      const contentType = res.headers.get('content-type') ?? '';
+      const rawText = await res.text();
+
+      // Some OpenAI-compatible gateways default to SSE unless stream:false is honored.
+      // If we still receive SSE, parse the last data chunk for content.
+      let body: {
         id?: string;
-        choices?: Array<{ message?: { content?: string } }>;
+        choices?: Array<{ message?: { content?: string }; delta?: { content?: string } }>;
         usage?: {
           prompt_tokens?: number;
           completion_tokens?: number;
@@ -323,7 +386,50 @@ export function createProductionAIExecutionPort(
         };
       };
 
-      const rawBody = body.choices?.[0]?.message?.content ?? '{}';
+      if (
+        contentType.includes('text/event-stream') ||
+        rawText.trimStart().startsWith('data:')
+      ) {
+        let content = '';
+        let id: string | undefined;
+        for (const line of rawText.split(/\r?\n/)) {
+          if (!line.startsWith('data:')) continue;
+          const data = line.slice(5).trim();
+          if (!data || data === '[DONE]') continue;
+          try {
+            const chunk = JSON.parse(data) as {
+              id?: string;
+              choices?: Array<{ delta?: { content?: string }; message?: { content?: string } }>;
+            };
+            if (chunk.id) id = chunk.id;
+            const delta = chunk.choices?.[0]?.delta?.content;
+            const msg = chunk.choices?.[0]?.message?.content;
+            if (typeof delta === 'string') content += delta;
+            if (typeof msg === 'string') content = msg;
+          } catch {
+            // ignore partial SSE parse errors
+          }
+        }
+        const sseBody: {
+          id?: string;
+          choices: Array<{ message: { content: string } }>;
+        } = {
+          choices: [{ message: { content: content || '{}' } }],
+        };
+        if (id) sseBody.id = id;
+        body = sseBody;
+      } else {
+        try {
+          body = JSON.parse(rawText) as typeof body;
+        } catch {
+          throw new Error(
+            `Provider returned non-JSON body: ${rawText.slice(0, 200)}`,
+          );
+        }
+      }
+
+      let rawBody = body.choices?.[0]?.message?.content ?? '{}';
+      rawBody = normalizeContractRawBody(params.promptContractVersion, rawBody);
       const usage = body.usage;
 
       const result: SingleAttemptResponse = {
