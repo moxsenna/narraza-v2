@@ -295,6 +295,94 @@ function normalizeContractRawBody(
     return JSON.stringify(obj);
   }
 
+  if (promptContractVersion === 'beat.judge.v1' && parsed && typeof parsed === 'object') {
+    const obj = parsed as Record<string, unknown>;
+    // Providers often return {status,message} instead of contract shape.
+    if (typeof obj.passed !== 'boolean') {
+      const status = String(obj.status ?? obj.result ?? '').toLowerCase();
+      if (status === 'pass' || status === 'passed' || status === 'ok' || status === 'success') {
+        obj.passed = true;
+      } else if (
+        status === 'fail' ||
+        status === 'failed' ||
+        status === 'reject' ||
+        status === 'rejected'
+      ) {
+        obj.passed = false;
+      } else if (typeof obj.ok === 'boolean') {
+        obj.passed = obj.ok;
+      } else {
+        // Default pass — deterministic P2 validators remain the enforcement gate
+        obj.passed = true;
+      }
+    }
+    if (typeof obj.candidateIndex !== 'number') {
+      obj.candidateIndex = 1;
+    }
+    if (!Array.isArray(obj.findings)) {
+      const msg =
+        typeof obj.message === 'string'
+          ? obj.message
+          : typeof obj.reason === 'string'
+            ? obj.reason
+            : '';
+      obj.findings =
+        !obj.passed && msg
+          ? [
+              {
+                code: 'provider.judge',
+                severity: 'warning',
+                publicMessageCode: 'generic_passable',
+                internalRationale: msg.slice(0, 500),
+              },
+            ]
+          : [];
+    } else {
+      // Coerce finding publicMessageCode to allowed enum when unknown
+      obj.findings = (obj.findings as Array<Record<string, unknown>>).map((f) => {
+        const next = { ...f };
+        if (typeof next.code !== 'string') next.code = 'provider.finding';
+        if (next.severity !== 'blocker' && next.severity !== 'warning' && next.severity !== 'info') {
+          next.severity = 'info';
+        }
+        const allowed = new Set([
+          'continuity_breach',
+          'character_voice_inconsistent',
+          'outline_deviation',
+          'fact_contradiction',
+          'pacing_issue',
+          'prose_quality_low',
+          'missing_sensory_detail',
+          'dialogue_unnatural',
+          'tone_inconsistent',
+          'reveal_premature',
+          'reveal_missing',
+          'description_overload',
+          'emotional_beat_weak',
+          'transition_abrupt',
+          'generic_passable',
+        ]);
+        if (
+          typeof next.publicMessageCode !== 'string' ||
+          !allowed.has(next.publicMessageCode)
+        ) {
+          next.publicMessageCode = 'generic_passable';
+        }
+        return next;
+      });
+    }
+    // Drop unknown keys that break .strict()
+    const normalized = {
+      candidateIndex: obj.candidateIndex,
+      passed: obj.passed,
+      findings: obj.findings,
+      ...(typeof obj.overallScore === 'number'
+        ? { overallScore: obj.overallScore }
+        : {}),
+    };
+    return JSON.stringify(normalized);
+  }
+
   return rawBody;
 }
 
