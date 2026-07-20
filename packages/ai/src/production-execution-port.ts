@@ -1,6 +1,6 @@
-// Production AIExecutionPort — real OpenRouter HTTP calls.
-// Shares plan/parse/classify/decide logic shape with mock port.
-// executeSingleAttempt hits OpenRouter; no silent mock fallback.
+// Production AIExecutionPort — OpenAI-compatible chat completions HTTP.
+// Supports custom base URL, primary model, and one-shot fallback model.
+// No silent mock fallback.
 
 import { randomUUID } from 'node:crypto';
 import type { z } from 'zod';
@@ -13,17 +13,28 @@ import type {
   NormalizedProviderError,
   SingleAttemptResponse,
 } from './types.js';
+import { requirePromptContract } from './prompt-contract-registry.js';
 
 export interface ProductionAIConfig {
-  openRouterApiKey: string;
-  geminiApiKey?: string;
-  defaultModelId?: string;
+  /** Bearer API key (server-side only) */
+  apiKey: string;
+  /** Chat completions base, e.g. https://host/v1 */
   baseUrl?: string;
+  /** Primary model id */
+  defaultModelId?: string;
+  /** Optional fallback model on retryable provider failure */
+  fallbackModelId?: string;
+  /** Display name for logs (never shown to end users as raw provider) */
+  providerLabel?: string;
 }
 
-function getStagesForJobType(jobType: string, modelId: string) {
+function getStagesForJobType(
+  jobType: string,
+  modelId: string,
+  providerLabel: string,
+) {
   const routing = {
-    provider: 'openrouter',
+    provider: providerLabel,
     modelId,
     mode: 'structured',
     timeoutMs: 60_000,
@@ -119,10 +130,11 @@ function getStagesForJobType(jobType: string, modelId: string) {
 function buildWorkflowPlan(
   params: BuildWorkflowPlanParams,
   modelId: string,
+  providerLabel: string,
 ): AIWorkflowPlan {
   return {
     planId: `plan-${params.jobType}-${Date.now()}`,
-    stages: getStagesForJobType(params.jobType, modelId),
+    stages: getStagesForJobType(params.jobType, modelId, providerLabel),
     createdAt: new Date().toISOString(),
   };
 }
@@ -135,7 +147,7 @@ function parseOutput<T>(contract: z.ZodType<T>, rawBody: string): T {
 function classifyError(error: unknown): NormalizedProviderError {
   if (error instanceof Error) {
     const msg = error.message.toLowerCase();
-    if (msg.includes('timeout') || msg.includes('timed out')) {
+    if (msg.includes('timeout') || msg.includes('timed out') || msg.includes('aborted')) {
       return {
         errorCode: 'PROVIDER_TIMEOUT',
         message: error.message,
@@ -156,6 +168,27 @@ function classifyError(error: unknown): NormalizedProviderError {
         errorCode: 'PROVIDER_AUTH',
         message: error.message,
         retryable: false,
+      };
+    }
+    if (msg.includes('safety') || msg.includes('content policy')) {
+      return {
+        errorCode: 'SAFETY_REFUSAL',
+        message: error.message,
+        retryable: false,
+      };
+    }
+    if (msg.includes('context too large') || msg.includes('too many tokens')) {
+      return {
+        errorCode: 'CONTEXT_TOO_LARGE',
+        message: error.message,
+        retryable: false,
+      };
+    }
+    if (msg.includes('500') || msg.includes('502') || msg.includes('503') || msg.includes('unavailable')) {
+      return {
+        errorCode: 'PROVIDER_UNAVAILABLE',
+        message: error.message,
+        retryable: true,
       };
     }
     return {
@@ -190,7 +223,9 @@ function decideNextAction(
     return { type: 'terminal', reason: 'No attempt produced' };
   }
   const currentStageIdx = workflowPlan.stages.findIndex(
-    (s) => s.promptContractVersion === currentInvocationKey || s.stageName === currentInvocationKey,
+    (s) =>
+      s.promptContractVersion === currentInvocationKey ||
+      s.stageName === currentInvocationKey,
   );
   if (currentStageIdx >= 0 && currentStageIdx < workflowPlan.stages.length - 1) {
     const nextStage = workflowPlan.stages[currentStageIdx + 1]!;
@@ -202,33 +237,43 @@ function decideNextAction(
   return { type: 'terminal', reason: 'All stages completed' };
 }
 
+function isRetryableHttpStatus(status: number): boolean {
+  return status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
+}
+
 /**
- * Create production AIExecutionPort backed by OpenRouter Chat Completions.
+ * Create production AIExecutionPort (OpenAI-compatible /v1/chat/completions).
  */
 export function createProductionAIExecutionPort(
   config: ProductionAIConfig,
 ): AIExecutionPort {
-  if (!config.openRouterApiKey || config.openRouterApiKey.length < 20) {
-    throw new Error('createProductionAIExecutionPort: openRouterApiKey required');
+  const apiKey = config.apiKey;
+  if (!apiKey || apiKey.length < 20) {
+    throw new Error('createProductionAIExecutionPort: apiKey required');
   }
 
-  const modelId = config.defaultModelId ?? 'openrouter/auto';
-  const baseUrl = config.baseUrl ?? 'https://openrouter.ai/api/v1';
+  const modelId = config.defaultModelId ?? 'ag/gemini-pro-agent';
+  const fallbackModelId = config.fallbackModelId;
+  const baseUrl = (config.baseUrl ?? 'https://openrouter.ai/api/v1').replace(/\/$/, '');
+  const providerLabel = config.providerLabel ?? 'openai-compatible';
 
-  async function executeSingleAttempt(
+  async function callChatCompletions(
+    model: string,
     params: ExecuteSingleAttemptParams,
+    timeoutMs: number,
   ): Promise<SingleAttemptResponse> {
-    const stage = params.workflowPlan.stages.find(
-      (s) => s.stageName === params.stageName,
-    );
-    const routeModel = stage?.routingPlan.modelId ?? modelId;
-    const timeoutMs = stage?.routingPlan.timeoutMs ?? 60_000;
-
-    const system = [
+    let system = [
       'You are a structured fiction-production assistant for Narraza.',
       `Respond with JSON only matching contract ${params.promptContractVersion}.`,
       'Do not include markdown fences or commentary.',
     ].join(' ');
+
+    try {
+      const contract = requirePromptContract(params.promptContractVersion);
+      system = `${contract.systemInstruction} Respond with JSON only. No markdown fences.`;
+    } catch {
+      // unknown contract version — keep default system
+    }
 
     const userContent =
       typeof params.promptPayload === 'string'
@@ -242,13 +287,13 @@ export function createProductionAIExecutionPort(
       const res = await fetch(`${baseUrl}/chat/completions`, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${config.openRouterApiKey}`,
+          Authorization: `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
           'HTTP-Referer': 'https://narraza.local',
           'X-Title': 'Narraza v2 worker-gen',
         },
         body: JSON.stringify({
-          model: routeModel,
+          model,
           messages: [
             { role: 'system', content: system },
             { role: 'user', content: userContent },
@@ -261,9 +306,11 @@ export function createProductionAIExecutionPort(
 
       if (!res.ok) {
         const text = await res.text().catch(() => '');
-        throw new Error(
-          `OpenRouter HTTP ${res.status}: ${text.slice(0, 300)}`,
+        const err = new Error(
+          `Provider HTTP ${res.status}: ${text.slice(0, 300)}`,
         );
+        (err as Error & { httpStatus?: number }).httpStatus = res.status;
+        throw err;
       }
 
       const body = (await res.json()) as {
@@ -292,7 +339,9 @@ export function createProductionAIExecutionPort(
       if (usage) {
         const providerUsage: NonNullable<SingleAttemptResponse['usage']> = {};
         if (usage.prompt_tokens != null) providerUsage.inputTokens = usage.prompt_tokens;
-        if (usage.completion_tokens != null) providerUsage.outputTokens = usage.completion_tokens;
+        if (usage.completion_tokens != null) {
+          providerUsage.outputTokens = usage.completion_tokens;
+        }
         if (usage.total_tokens != null) providerUsage.totalTokens = usage.total_tokens;
         result.usage = providerUsage;
       }
@@ -307,8 +356,36 @@ export function createProductionAIExecutionPort(
     }
   }
 
+  async function executeSingleAttempt(
+    params: ExecuteSingleAttemptParams,
+  ): Promise<SingleAttemptResponse> {
+    const stage = params.workflowPlan.stages.find(
+      (s) => s.stageName === params.stageName,
+    );
+    const routeModel = stage?.routingPlan.modelId ?? modelId;
+    const timeoutMs = stage?.routingPlan.timeoutMs ?? 60_000;
+
+    try {
+      return await callChatCompletions(routeModel, params, timeoutMs);
+    } catch (primaryErr) {
+      // One-shot fallback model on retryable failures only
+      if (!fallbackModelId || fallbackModelId === routeModel) {
+        throw primaryErr;
+      }
+      const classified = classifyError(primaryErr);
+      const httpStatus = (primaryErr as Error & { httpStatus?: number }).httpStatus;
+      const retryableHttp =
+        httpStatus != null ? isRetryableHttpStatus(httpStatus) : false;
+      if (!classified.retryable && !retryableHttp) {
+        throw primaryErr;
+      }
+      return callChatCompletions(fallbackModelId, params, timeoutMs);
+    }
+  }
+
   return {
-    buildWorkflowPlan: (params) => buildWorkflowPlan(params, modelId),
+    buildWorkflowPlan: (params) =>
+      buildWorkflowPlan(params, modelId, providerLabel),
     executeSingleAttempt,
     parseOutput,
     classifyError,

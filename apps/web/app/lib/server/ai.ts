@@ -11,8 +11,11 @@ import { createAIExecutionPort, type AIExecutionPort } from '@narraza/ai';
 export function createWebAIExecutionPort(): AIExecutionPort {
   return createAIExecutionPort({
     enableMock: process.env.AI_ENABLE_MOCK === 'true',
-    openRouterApiKey: process.env.OPENROUTER_API_KEY,
-    geminiApiKey: process.env.GEMINI_API_KEY,
+    apiKey: process.env.AI_API_KEY ?? process.env.OPENROUTER_API_KEY,
+    baseUrl: process.env.AI_BASE_URL,
+    defaultModelId: process.env.AI_MODEL,
+    fallbackModelId: process.env.AI_FALLBACK_MODEL,
+    providerLabel: process.env.AI_PROVIDER_LABEL,
     nodeEnv: process.env.NODE_ENV,
   });
 }

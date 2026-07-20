@@ -28,21 +28,26 @@ describe('createAIExecutionPort', () => {
       createAIExecutionPort({
         enableMock: false,
         nodeEnv: 'development',
-        openRouterApiKey: '',
+        apiKey: '',
       }),
-    ).toThrow(/OPENROUTER_API_KEY/i);
+    ).toThrow(/AI_API_KEY|OPENROUTER_API_KEY/i);
   });
 
   it('returns production port when mock off and key present', () => {
     const port = createAIExecutionPort({
       enableMock: false,
       nodeEnv: 'production',
-      openRouterApiKey: 'sk-or-v1-test-key-1234567890',
+      apiKey: 'sk-test-key-1234567890abcdef',
+      baseUrl: 'https://example.test/v1',
+      defaultModelId: 'ag/gemini-pro-agent',
+      fallbackModelId: 'gcli/grok-4.5-high',
+      providerLabel: '9router',
     });
     const plan = port.buildWorkflowPlan({
       jobType: 'beat.write',
       projectId: 'p1',
     });
-    expect(plan.stages[0]?.routingPlan.provider).toBe('openrouter');
+    expect(plan.stages[0]?.routingPlan.provider).toBe('9router');
+    expect(plan.stages[0]?.routingPlan.modelId).toBe('ag/gemini-pro-agent');
   });
 });

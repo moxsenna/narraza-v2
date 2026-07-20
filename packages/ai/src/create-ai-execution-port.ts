@@ -8,14 +8,21 @@ import { createProductionAIExecutionPort } from './production-execution-port.js'
 export interface CreateAIExecutionPortOptions {
   /** When true, mock is allowed (dev/test/CI). Forbidden when NODE_ENV=production. */
   enableMock?: boolean | undefined;
-  /** OpenRouter API key required when mock is off. */
+  /** API key required when mock is off. */
+  apiKey?: string | undefined;
+  /** @deprecated use apiKey — kept for call-site compatibility */
   openRouterApiKey?: string | undefined;
-  /** Optional Gemini key for alternate routing. */
   geminiApiKey?: string | undefined;
   /** Explicit NODE_ENV override; defaults to process.env.NODE_ENV. */
   nodeEnv?: string | undefined;
-  /** Default model id for production routing. */
+  /** Primary model id for production routing. */
   defaultModelId?: string | undefined;
+  /** Fallback model id on retryable provider failure. */
+  fallbackModelId?: string | undefined;
+  /** OpenAI-compatible base URL (…/v1). */
+  baseUrl?: string | undefined;
+  /** Internal provider label for logs. */
+  providerLabel?: string | undefined;
 }
 
 /**
@@ -23,7 +30,7 @@ export interface CreateAIExecutionPortOptions {
  *
  * Rules:
  * - NODE_ENV=production + enableMock → throw
- * - mock off without OPENROUTER_API_KEY → throw
+ * - mock off without API key → throw
  * - no silent mock fallback
  */
 export function createAIExecutionPort(
@@ -31,8 +38,7 @@ export function createAIExecutionPort(
 ): AIExecutionPort {
   const nodeEnv = options.nodeEnv ?? process.env.NODE_ENV ?? 'development';
   const enableMock =
-    options.enableMock ??
-    (process.env.AI_ENABLE_MOCK === 'true');
+    options.enableMock ?? process.env.AI_ENABLE_MOCK === 'true';
 
   if (nodeEnv === 'production' && enableMock) {
     throw new Error(
@@ -44,25 +50,46 @@ export function createAIExecutionPort(
     return createMockAIExecutionPort();
   }
 
-  const openRouterApiKey =
-    options.openRouterApiKey ?? process.env.OPENROUTER_API_KEY;
-  if (!openRouterApiKey || openRouterApiKey.length < 20) {
+  const apiKey =
+    options.apiKey ??
+    options.openRouterApiKey ??
+    process.env.AI_API_KEY ??
+    process.env.OPENROUTER_API_KEY;
+
+  if (!apiKey || apiKey.length < 20) {
     throw new Error(
-      'OPENROUTER_API_KEY required when AI_ENABLE_MOCK is not true (fail-fast, no mock fallback)',
+      'AI_API_KEY (or OPENROUTER_API_KEY) required when AI_ENABLE_MOCK is not true (fail-fast, no mock fallback)',
     );
   }
 
-  const geminiApiKey = options.geminiApiKey ?? process.env.GEMINI_API_KEY;
+  const baseUrl =
+    options.baseUrl ??
+    process.env.AI_BASE_URL ??
+    'https://openrouter.ai/api/v1';
+  const defaultModelId =
+    options.defaultModelId ??
+    process.env.AI_MODEL ??
+    'ag/gemini-pro-agent';
+  const fallbackModelId =
+    options.fallbackModelId ?? process.env.AI_FALLBACK_MODEL;
+  const providerLabel =
+    options.providerLabel ?? process.env.AI_PROVIDER_LABEL ?? 'openai-compatible';
+
   const prodConfig: {
-    openRouterApiKey: string;
+    apiKey: string;
+    baseUrl: string;
     defaultModelId: string;
-    geminiApiKey?: string;
+    providerLabel: string;
+    fallbackModelId?: string;
   } = {
-    openRouterApiKey,
-    defaultModelId: options.defaultModelId ?? 'openrouter/auto',
+    apiKey,
+    baseUrl,
+    defaultModelId,
+    providerLabel,
   };
-  if (geminiApiKey) {
-    prodConfig.geminiApiKey = geminiApiKey;
+  if (fallbackModelId) {
+    prodConfig.fallbackModelId = fallbackModelId;
   }
+
   return createProductionAIExecutionPort(prodConfig);
 }

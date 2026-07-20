@@ -119,8 +119,8 @@ describe('production mock fail-fast (P3.2)', () => {
       createAIExecutionPort({
         enableMock: false,
         nodeEnv: 'production',
-        openRouterApiKey: '',
+        apiKey: '',
       }),
-    ).toThrow(/OPENROUTER_API_KEY/i);
+    ).toThrow(/AI_API_KEY|OPENROUTER_API_KEY/i);
   });
 });
